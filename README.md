@@ -22,7 +22,7 @@ manipulate Zip archives in Haskell. The library is specially written to be
 production-quality, it's long-term supported, and complete. In particular,
 it's created with large multimedia data in mind and provides all features
 users might expect, comparable in terms of feature-set with libraries like
-`ziplib` in C.
+`libzip` in C.
 
 ## Why this library is written
 
@@ -47,12 +47,13 @@ be used to do the same thing in constant memory. More about this below.
 
 ### LibZip
 
-This is bindings to C library `ziplib`. There is always certain kind of
-trouble when you are using bindings. For example, you need to take care that
-target library is installed and its version is compatible with version of
-your binding. Yes, this means additional headaches. It should be just “plug
-and play” (if you're using Stack), but now you need to watch out for
-compatibility.
+This is bindings to C library
+[`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always certain
+kind of trouble when you are using bindings. For example, you need to take
+care that target library is installed and its version is compatible with
+version of your binding. Yes, this means additional headaches. It should be
+just “plug and play” (if you're using Stack), but now you need to watch out
+for compatibility.
 
 It's not that bad with libraries that do not break their API for years, but
 it's not the case with `ziplib`. As maintainer of `LibZip` puts it:
