@@ -1,0 +1,81 @@
+--
+-- Cabal configuration for ‘zip’.
+--
+-- Copyright © 2016 Mark Karpov
+--
+-- Redistribution and use in source and binary forms, with or without
+-- modification, are permitted provided that the following conditions are
+-- met:
+--
+-- * Redistributions of source code must retain the above copyright notice,
+--   this list of conditions and the following disclaimer.
+--
+-- * Redistributions in binary form must reproduce the above copyright
+--   notice, this list of conditions and the following disclaimer in the
+--   documentation and/or other materials provided with the distribution.
+--
+-- * Neither the name Mark Karpov nor the names of contributors may be used
+--   to endorse or promote products derived from this software without
+--   specific prior written permission.
+--
+-- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS “AS IS” AND ANY
+-- EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-- WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-- DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY
+-- DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+-- DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+-- OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+-- HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+-- STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+-- ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+-- POSSIBILITY OF SUCH DAMAGE.
+
+name:                 zip
+version:              0.1.0
+cabal-version:        >= 1.10
+license:              BSD3
+license-file:         LICENSE.md
+author:               Mark Karpov <markkarpov@opmbx.org>
+maintainer:           Mark Karpov <markkarpov@opmbx.org>
+homepage:             https://github.com/mrkkrp/zip
+bug-reports:          https://github.com/mrkkrp/zip/issues
+category:             Codec
+synopsis:             Manipulating zip archives
+build-type:           Simple
+description:          Manipulating zip archives.
+extra-source-files:   CHANGELOG.md
+                    , README.md
+
+flag dev
+  description:        Turn on development settings.
+  manual:             True
+  default:            False
+
+library
+  build-depends:      base         >= 4.7 && < 5
+                    , exceptions   >= 0.8
+                    , transformers >= 0.3
+  exposed-modules:    System.PlanB
+                    , System.PlanB.Type
+  if flag(dev)
+    ghc-options:      -Wall -Werror
+  else
+    ghc-options:      -O2 -Wall
+  default-language:   Haskell2010
+
+test-suite tests
+  main-is:            Main.hs
+  hs-source-dirs:     tests
+  type:               exitcode-stdio-1.0
+  if flag(dev)
+    ghc-options:      -Wall -Werror
+  else
+    ghc-options:      -O2 -Wall
+  build-depends:      base         >= 4.7 && < 5
+                    , hspec        >= 2.0
+                    , zip          >= 0.1
+  default-language:   Haskell2010
+
+source-repository head
+  type:               git
+  location:           https://github.com/mrkkrp/zip.git
