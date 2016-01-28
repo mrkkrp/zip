@@ -52,11 +52,20 @@ flag dev
   default:            False
 
 library
-  build-depends:      base         >= 4.7 && < 5
-                    , exceptions   >= 0.8
-                    , transformers >= 0.3
-  exposed-modules:    System.PlanB
-                    , System.PlanB.Type
+  build-depends:      base          >= 4.7 && < 5
+                    , bytestring    >= 0.9
+                    , cereal        >= 0.3
+                    , conduit       >= 1.1
+                    , conduit-extra >= 1.1
+                    , digest
+                    , exceptions    >= 0.8
+                    , mtl           >= 2.0
+                    , path          >= 0.5
+                    , path-io       >= 0.2
+                    , time          >= 1.4
+                    , transformers  >= 0.3
+  exposed-modules:    Codec.Archive.Zip
+  other-modules:      Codec.Archive.Zip.Internal
   if flag(dev)
     ghc-options:      -Wall -Werror
   else
@@ -71,9 +80,21 @@ test-suite tests
     ghc-options:      -Wall -Werror
   else
     ghc-options:      -O2 -Wall
-  build-depends:      base         >= 4.7 && < 5
-                    , hspec        >= 2.0
-                    , zip          >= 0.1
+  build-depends:      base          >= 4.7 && < 5
+                    , zip           >= 0.1
+  default-language:   Haskell2010
+
+benchmark bench
+  main-is:            Main.hs
+  hs-source-dirs:     bench
+  type:               exitcode-stdio-1.0
+  if flag(dev)
+    ghc-options:      -O2 -Wall -Werror
+  else
+    ghc-options:      -O2 -Wall
+  build-depends:      base          >= 4.7 && < 5
+                    , criterion     >= 1.0
+                    , zip           >= 0.1
   default-language:   Haskell2010
 
 source-repository head
