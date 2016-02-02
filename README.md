@@ -84,15 +84,17 @@ be done in pure Haskell.
 
 This one uses the right approach: leverage good streaming library
 (`conduit`) for memory-efficient processing in pure Haskell. This is however
-is not feature-rich and has certain problems, reported on its issue
-tracker. I would rather contribute to that project only if it were
-maintained, but it's not (last sign of activity was on December 23, 2014).
+is not feature-rich and has certain problems (including programming style),
+some of them are reported on its issue tracker. It also does not appear to
+be maintained (last sign of activity was on December 23, 2014).
 
 ## Features
 
 The library supports all features specified in modern Zip
 specifications. The only feature that is not currently supported is
 encryption, see more about this below.
+
+For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
 
 ### Compression methods
 
@@ -106,8 +108,8 @@ encryption, see more about this below.
 
 Encryption is currently not supported. Encryption system described in Zip
 specification is known to be seriously flawed, so it's probably not the best
-way to protect your data anyway. The feature may be added in the future,
-though.
+way to protect your data anyway. The encryption method seems to be
+proprietary technology of PKWARE, so to hell with it.
 
 ### Multi-file archives
 
@@ -118,8 +120,7 @@ though.
 >
 > — [Wikipedia](https://en.wikipedia.org/wiki/Zip_%28file_format%29#Structure)
 
-The `zip` library supports this feature and let you create and extract
-multi-file archives.
+Currently unsupported, but it will be.
 
 ### Sources of file data
 
@@ -164,9 +165,8 @@ and also gives its user full control over extra fields that are written to
 file headers, so the user can store arbitrary information about file in the
 archive.
 
-It's not described in the specification how to store OS-specific attributes
-like permissions in the archive, but it's commonly (or not so commonly) done
-via the above mentioned extra fields. For now, we do not support this.
+The library also uses extra fields to save some OS-specific information
+about files is it's described in the specification.
 
 ### File names
 
