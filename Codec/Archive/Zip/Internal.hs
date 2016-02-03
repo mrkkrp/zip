@@ -7,8 +7,13 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- TODO Describe me, please.
+-- Low-level, non-public concepts and operations.
 
 module Codec.Archive.Zip.Internal
-  (  )
+  ( PendingAction
+  )
 where
+
+data PendingAction
+  = AddEntry
+  | RemoveEntry
