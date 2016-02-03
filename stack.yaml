@@ -1,3 +1,3 @@
-resolver: nightly-2016-01-27
+resolver: nightly-2016-02-01
 packages:
 - '.'
