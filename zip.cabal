@@ -63,7 +63,8 @@ library
                     , filepath         >= 1.2
                     , mtl              >= 2.0
                     , path             >= 0.5
-                    , path-io          >= 0.2
+                    , path-io          >= 0.3.1
+                    , resourcet        >= 1.0
                     , semigroups       >= 0.5
                     , text             >= 0.2
                     , time             >= 1.4
