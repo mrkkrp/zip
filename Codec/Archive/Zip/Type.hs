@@ -18,21 +18,38 @@ module Codec.Archive.Zip.Type
     EntrySelectorException
   , EntrySelector
   , mkEntrySelector
-  , unEntrySelector )
+  , unEntrySelector
+  , getEntryName
+    -- * Entry description
+  , EntryDescription (..)
+  , CompressionMethod (..)
+    -- * Archive desrciption
+  , ArchiveDescription (..)
+  , SplitSize
+  )
 where
 
+import Control.Arrow ((>>>), (&&&))
 import Control.Exception (Exception)
 import Control.Monad.Catch (MonadThrow (..))
+import Data.ByteString (ByteString)
 import Data.CaseInsensitive (CI)
+import Data.Char (ord)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe (mapMaybe, fromJust)
+import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Path
 import qualified Data.CaseInsensitive    as CI
 import qualified Data.List.NonEmpty      as NE
+import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
 import qualified System.FilePath         as FP
 import qualified System.FilePath.Posix   as Posix
 import qualified System.FilePath.Windows as Windows
+
+----------------------------------------------------------------------------
+-- Entry selector
 
 -- | Exception describing various troubles you can have with
 -- 'EntrySelector'.
@@ -95,9 +112,59 @@ mkEntrySelector path =
 -- produces single 'Path Rel File' that corresponds to it.
 
 unEntrySelector :: EntrySelector -> Path Rel File
-unEntrySelector = fromJust
-  . parseRelFile
-  . FP.joinPath
-  . fmap CI.original
-  . NE.toList
-  . unES
+unEntrySelector = unES
+  >>> NE.toList
+  >>> fmap CI.original
+  >>> FP.joinPath
+  >>> parseRelFile
+  >>> fromJust
+
+-- | Get entry name given 'EntrySelector'. That name will be written into
+-- archive file. The function returns 'ByteString' of the name as well as
+-- indication whether archive should use newer Unicode-aware features to
+-- properly represent the file name.
+
+getEntryName :: EntrySelector -> (Bool, ByteString)
+getEntryName = unES
+  >>> fmap CI.original
+  >>> NE.intersperse "/"
+  >>> NE.toList
+  >>> concat
+  >>> T.pack
+  >>> ((not . T.all validCP437) &&& T.encodeUtf8)
+  where validCP437 x = let y = ord x in y >= 32 && y <= 126
+
+----------------------------------------------------------------------------
+-- Entry description
+
+-- | This record represents all information about archive entry that can be
+-- stored in a .ZIP archive. It does not mirror local file header or central
+-- directory file header, but their binary representation can be built given
+-- this date structure.
+
+data EntryDescription = EntryDescription
+  { edSelector    :: EntrySelector
+  , edComment     :: Maybe Text
+  , edCompression :: CompressionMethod
+    -- ^ If 'Nothing', this entry is a directory
+  }
+
+-- | Supported compression methods.
+
+data CompressionMethod
+  = Store              -- ^ Store file uncompressed
+  | Deflate            -- ^ Deflate
+  | BZip2              -- ^ Compressed using BZip2 algorithm
+
+----------------------------------------------------------------------------
+-- Archive description
+
+-- | Information about archive as a whole.
+
+data ArchiveDescription = ArchiveDescription
+  { adComment :: Maybe Text
+  }
+
+data SplitSize -- TODO We need a smart constructor here
+  = NoSplit
+  | SplitSize Int
