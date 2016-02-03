@@ -69,6 +69,7 @@ library
                     , text             >= 0.2
                     , time             >= 1.4
                     , transformers     >= 0.3
+  default-extensions: RecordWildCards
   exposed-modules:    Codec.Archive.Zip
                     , Codec.Archive.Zip.Type
   other-modules:      Codec.Archive.Zip.Internal
