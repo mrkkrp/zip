@@ -119,20 +119,16 @@ unEntrySelector = unES
   >>> parseRelFile
   >>> fromJust
 
--- | Get entry name given 'EntrySelector'. That name will be written into
--- archive file. The function returns 'ByteString' of the name as well as
--- indication whether archive should use newer Unicode-aware features to
--- properly represent the file name.
+-- | Get entry name given 'EntrySelector' in from that is suitable for
+-- writing to file header.
 
-getEntryName :: EntrySelector -> (Bool, ByteString)
+getEntryName :: EntrySelector -> Text
 getEntryName = unES
   >>> fmap CI.original
   >>> NE.intersperse "/"
   >>> NE.toList
   >>> concat
   >>> T.pack
-  >>> ((not . T.all validCP437) &&& T.encodeUtf8)
-  where validCP437 x = let y = ord x in y >= 32 && y <= 126
 
 ----------------------------------------------------------------------------
 -- Entry description
