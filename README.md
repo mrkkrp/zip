@@ -15,7 +15,7 @@
 * [Features](#features)
     * [Compression methods](#compression-methods)
     * [Encryption](#encryption)
-    * [Multi-file archives](#multi-file-archives)
+    * [Split archives](#split-archives)
     * [Sources of file data](#sources-of-file-data)
     * [ZIP64](#zip64)
     * [Unicode in filenames](#unicode-in-filenames)
@@ -111,7 +111,7 @@ specification is known to be seriously flawed, so it's probably not the best
 way to protect your data anyway. The encryption method seems to be
 proprietary technology of PKWARE, so to hell with it.
 
-### Multi-file archives
+### Split archives
 
 > The .ZIP specification supports spreading archives across multiple
 > filesystem files. Originally intended for storage of large .ZIP files
@@ -120,7 +120,9 @@ proprietary technology of PKWARE, so to hell with it.
 >
 > — [Wikipedia](https://en.wikipedia.org/wiki/Zip_%28file_format%29#Structure)
 
-Currently unsupported, but it will be.
+*Split* archives are supported (it's when you have several files), but
+*spanned* ones are not (this support has typically only been provided for
+DOS formatted floppy diskettes).
 
 ### Sources of file data
 
@@ -134,9 +136,6 @@ how to get extracted data. The following methods are supported:
 * *Conduit source or sink.*
 
 * *ByteString.* Use it only with small files.
-
-* *Copy file from another archive.* This happens without re-compression, of
-  course.
 
 ### ZIP64
 
@@ -164,9 +163,6 @@ The library allows to attach comments to entire archive or individual files,
 and also gives its user full control over extra fields that are written to
 file headers, so the user can store arbitrary information about file in the
 archive.
-
-The library also uses extra fields to save some OS-specific information
-about files is it's described in the specification.
 
 ### File names
 
