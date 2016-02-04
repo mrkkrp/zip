@@ -13,18 +13,18 @@
 -- confusion in the future.
 --
 -- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
--- 'File' things. This method may seem awkward, but it will protect you from
--- problems with portability when your archive is unpacked on different
--- platform. Using of well-typed paths is also something you should consider
--- doing in your projects anyway.
+-- 'File' things. This method may seem awkward at first, but it will protect
+-- you from problems with portability when your archive is unpacked on a
+-- different platform. Using of well-typed paths is also something you
+-- should consider doing in your projects anyway.
 --
 -- The second thing, that is rather a consequence of the first, is that
 -- there is no way to add directories, or to be precise, /empty directories/
--- to your archive. This approach is used is Git, and we find it quite sane.
+-- to your archive. This approach is used in Git, and I find it quite sane.
 --
 -- Finally, the third feature of the library is that it does not modify
 -- archive instantly, because doing so would often be inefficient. Instead
--- we maintain sort of collection of pending actions that can be turned into
+-- we maintain collection of pending actions that can be turned into
 -- optimized action that efficiently modifies archive in one pass. Normally
 -- this should not be of any concern for you, because all actions are
 -- performed automatically when you leave the realm of 'ZipArchive'
@@ -39,8 +39,24 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Codec.Archive.Zip
-  ( -- * Archive monad
-    ZipArchive
+  ( -- * Types
+    -- ** Entry selector
+    EntrySelector
+  , mkEntrySelector
+  , unEntrySelector
+  , getEntryName
+  , EntrySelectorException
+    -- ** Entry description
+  , EntryDescription (..)
+  , CompressionMethod (..)
+  , ExtraField (..)
+    -- ** Archive description
+  , ArchiveDescription (..)
+  , SplitOption
+  , noSplit
+  , splitSize
+    -- * Archive monad
+  , ZipArchive
   , createArchive
   , withArchive
     -- * Retrieving information
@@ -49,7 +65,7 @@ module Codec.Archive.Zip
   , sourceEntry
   , saveEntry
   , unpackInto
-  , getArchiveComment
+  , getArchiveDescription
     -- * Modifying archive
     -- ** Adding entries
   , addEntry
@@ -62,7 +78,6 @@ module Codec.Archive.Zip
   , setEntryComment
   , deleteEntryComment
   , setModTime
-  , setEntryAttributes
   , addExtraField
   , deleteExtraField
     -- ** Operations on archive as a whole
@@ -80,11 +95,12 @@ import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State
-import Control.Monad.Trans.Resource (ResourceT, runResourceT)
+import Control.Monad.Trans.Resource (ResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
+import Numeric.Natural
 import Path
 import Path.IO
 import qualified Data.ByteString as B
@@ -112,10 +128,11 @@ newtype ZipArchive a = ZipArchive
 -- | Internal state record used by the 'ZipArchive' monad.
 
 data ZipState = ZipState
-  { zsFilePath :: Path Abs File      -- ^ Absolute path to zip archive
-  , zsEntries  :: [EntryDescription] -- ^ Actual collection of entries
-  , zsArchive  :: ArchiveDescription -- ^ Info about the whole archive
-  , zsActions  :: [PendingAction]    -- ^ Pending actions
+  { zsFilePath  :: Path Abs File      -- ^ Absolute path to zip archive
+  , zsSplitSize :: SplitSize          -- ^ How to split the archive
+  , zsEntries   :: [EntryDescription] -- ^ Actual collection of entries
+  , zsArchive   :: ArchiveDescription -- ^ Info about the whole archive
+  , zsActions   :: [PendingAction]    -- ^ Pending actions
   }
 
 -- | Create new archive given its location and action that describes how to
@@ -204,8 +221,8 @@ unpackInto dir = do
 
 -- | Get archive comment.
 
-getArchiveComment :: ZipArchive (Maybe Text)
-getArchiveComment = undefined
+getArchiveDescription :: ZipArchive ArchiveDescription
+getArchiveDescription = undefined
 
 ----------------------------------------------------------------------------
 -- Modifying archive
@@ -228,9 +245,7 @@ sinkEntry
   -> ZipArchive Bool   -- ^ 'True' if successfully added
 sinkEntry = undefined
 
--- | Load entry from given file. Note that this function will try to
--- preserve file attributes, if it's not desirable use 'setEntryAttributes'
--- to overwrite them after the fact.
+-- | Load entry from given file.
 
 loadEntry
   :: CompressionMethod -- ^ Compression method to use
@@ -284,29 +299,25 @@ deleteEntryComment = undefined
 -- | Set “last modification” date\/time.
 
 setModTime
-  :: UTCTime
-  -> EntrySelector
-  -> ZipArchive Bool
+  :: UTCTime           -- ^ New modification time
+  -> EntrySelector     -- ^ Name of entry to modify
+  -> ZipArchive Bool   -- ^ 'True' on success
 setModTime = undefined
-
--- | Set file attributes for an archive entry.
-
-setEntryAttributes -- FIXME not sure how to represent attributes
-  :: EntrySelector
-  -> ZipArchive Bool
-setEntryAttributes = undefined
 
 -- | Add an extra field.
 
-addExtraField -- FIXME not sure how to represent the fields in not too
-  -- low-level form
-  :: EntrySelector
-  -> ZipArchive Bool
+addExtraField
+  :: ExtraField        -- ^ Extra field to add
+  -> EntrySelector     -- ^ Name of entry to modify
+  -> ZipArchive ()     -- ^ 'True' on success
 addExtraField = undefined
 
-deleteExtraField -- FIXME see above ↑
-  :: EntrySelector
-  -> ZipArchive Bool
+-- | Delete an extra field by its type.
+
+deleteExtraField
+  :: Natural           -- ^ Type of extra field to delete
+  -> EntrySelector     -- ^ Name of entry to modify
+  -> ZipArchive Bool   -- ^ 'True' in success
 deleteExtraField = undefined
 
 -- | Set comment of entire archive.
