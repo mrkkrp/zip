@@ -15,54 +15,45 @@
 
 module Codec.Archive.Zip.Type
   ( -- * Entry selector
-    EntrySelectorException
-  , EntrySelector
+    EntrySelector
   , mkEntrySelector
   , unEntrySelector
   , getEntryName
+  , EntrySelectorException
     -- * Entry description
   , EntryDescription (..)
   , CompressionMethod (..)
+  , ExtraField (..)
     -- * Archive desrciption
   , ArchiveDescription (..)
-  , SplitSize
-  )
+  , SplitOption
+  , noSplit
+  , splitSize
+  , getSplitSize )
 where
 
-import Control.Arrow ((>>>), (&&&))
+import Control.Arrow ((>>>))
 import Control.Exception (Exception)
 import Control.Monad.Catch (MonadThrow (..))
 import Data.ByteString (ByteString)
 import Data.CaseInsensitive (CI)
-import Data.Char (ord)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Text (Text)
+import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
+import Data.Version (Version)
+import Numeric.Natural
 import Path
 import qualified Data.CaseInsensitive    as CI
 import qualified Data.List.NonEmpty      as NE
 import qualified Data.Text               as T
-import qualified Data.Text.Encoding      as T
 import qualified System.FilePath         as FP
 import qualified System.FilePath.Posix   as Posix
 import qualified System.FilePath.Windows as Windows
 
 ----------------------------------------------------------------------------
 -- Entry selector
-
--- | Exception describing various troubles you can have with
--- 'EntrySelector'.
-
-data EntrySelectorException
-  = InvalidEntrySelector (Path Rel File)
-    -- ^ Selector cannot be created from this path
-  deriving (Typeable)
-
-instance Show EntrySelectorException where
-  show (InvalidEntrySelector path) = "Cannot build selector from " ++ show path
-
-instance Exception EntrySelectorException
 
 -- | This data type serves for naming and selection of archive
 -- entries. It can be created only with help of smart constructor
@@ -130,20 +121,37 @@ getEntryName = unES
   >>> concat
   >>> T.pack
 
+-- | Exception describing various troubles you can have with
+-- 'EntrySelector'.
+
+data EntrySelectorException
+  = InvalidEntrySelector (Path Rel File)
+    -- ^ Selector cannot be created from this path
+  deriving (Typeable)
+
+instance Show EntrySelectorException where
+  show (InvalidEntrySelector path) = "Cannot build selector from " ++ show path
+
+instance Exception EntrySelectorException
+
 ----------------------------------------------------------------------------
 -- Entry description
 
 -- | This record represents all information about archive entry that can be
 -- stored in a .ZIP archive. It does not mirror local file header or central
 -- directory file header, but their binary representation can be built given
--- this date structure.
+-- this date structure and actual archive contents.
 
 data EntryDescription = EntryDescription
-  { edSelector    :: EntrySelector
-  , edComment     :: Maybe Text
-  , edCompression :: CompressionMethod
-    -- ^ If 'Nothing', this entry is a directory
-  }
+  { edVersionMadeBy    :: Version
+  , edVersionNeeded    :: Version
+  , edCompression      :: CompressionMethod
+  , edModified         :: UTCTime
+  , edCompressedSize   :: Natural
+  , edUncompressedSize :: Natural
+  , edSelector         :: EntrySelector
+  , edComment          :: Maybe Text
+  , edExtraFields      :: [ExtraField] }
 
 -- | Supported compression methods.
 
@@ -151,6 +159,13 @@ data CompressionMethod
   = Store              -- ^ Store file uncompressed
   | Deflate            -- ^ Deflate
   | BZip2              -- ^ Compressed using BZip2 algorithm
+    deriving (Eq, Enum, Read, Show)
+
+-- | The type represents all extra fields described in the specification as
+-- well as a way to store unknown extra fields that can be parsed by the
+-- user if he knows what they are.
+
+data ExtraField = ExtraField Natural ByteString
 
 ----------------------------------------------------------------------------
 -- Archive description
@@ -158,9 +173,32 @@ data CompressionMethod
 -- | Information about archive as a whole.
 
 data ArchiveDescription = ArchiveDescription
-  { adComment :: Maybe Text
-  }
+  { adComment    :: Maybe Text
+  , adDiskNumber :: Natural }
 
-data SplitSize -- TODO We need a smart constructor here
+-- | How to split archive into several files with upper limit on length. Use
+-- the 'noSplit' and 'splitSize' smart constructors to create values of this
+-- type.
+
+data SplitOption
   = NoSplit
-  | SplitSize Int
+  | SplitSize Natural
+
+-- | Create 'SplitOption' value that indicates that no splitting should be
+-- performed.
+
+noSplit :: SplitOption
+noSplit = NoSplit
+
+-- | Create 'SplitOption' value given maximum size of archive file in
+-- bytes. Minimal split size is 1 KB, if you pass something lesser than
+-- that, it's equivalent to no splitting at all.
+
+splitSize :: Natural -> SplitOption
+splitSize x = if x < 1024 then NoSplit else SplitSize x
+
+-- | Get split size.
+
+getSplitSize :: SplitOption -> Maybe Natural
+getSplitSize NoSplit       = Nothing
+getSplitSize (SplitSize x) = Just x
