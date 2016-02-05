@@ -15,7 +15,6 @@
 * [Features](#features)
     * [Compression methods](#compression-methods)
     * [Encryption](#encryption)
-    * [Split archives](#split-archives)
     * [Sources of file data](#sources-of-file-data)
     * [ZIP64](#zip64)
     * [Unicode in filenames](#unicode-in-filenames)
@@ -110,19 +109,6 @@ Encryption is currently not supported. Encryption system described in Zip
 specification is known to be seriously flawed, so it's probably not the best
 way to protect your data anyway. The encryption method seems to be
 proprietary technology of PKWARE, so to hell with it.
-
-### Split archives
-
-> The .ZIP specification supports spreading archives across multiple
-> filesystem files. Originally intended for storage of large .ZIP files
-> across multiple floppy disks, this feature is now used for sending .ZIP
-> archives in parts over email, or over other transports or removable media.
->
-> — [Wikipedia](https://en.wikipedia.org/wiki/Zip_%28file_format%29#Structure)
-
-*Split* archives are supported (it's when you have several files), but
-*spanned* ones are not (this support has typically only been provided for
-DOS formatted floppy diskettes).
 
 ### Sources of file data
 

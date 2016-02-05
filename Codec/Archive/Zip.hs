@@ -9,8 +9,8 @@
 --
 -- The module provides everything you need to manipulate Zip archives. The
 -- library covers all functionality that may be of interest of most users,
--- however, there is three things that should clarified right away, to avoid
--- confusion in the future.
+-- however, there are three things that should clarified right away, to
+-- avoid confusion in the future.
 --
 -- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
 -- 'File' things. This method may seem awkward at first, but it will protect
@@ -23,13 +23,13 @@
 -- to your archive. This approach is used in Git, and I find it quite sane.
 --
 -- Finally, the third feature of the library is that it does not modify
--- archive instantly, because doing so would often be inefficient. Instead
--- we maintain collection of pending actions that can be turned into
--- optimized action that efficiently modifies archive in one pass. Normally
--- this should not be of any concern for you, because all actions are
--- performed automatically when you leave the realm of 'ZipArchive'
--- monad. If, however, you ever need to force update, 'commit' function is
--- your friend. There are even “undo” functions, by the way.
+-- archive instantly, because doing so on every manipulation would often be
+-- inefficient. Instead we maintain collection of pending actions that can
+-- be turned into optimized action that efficiently modifies archive in one
+-- pass. Normally this should not be of any concern for you, because all
+-- actions are performed automatically when you leave the realm of
+-- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
+-- function is your friend. There are even “undo” functions, by the way.
 --
 -- Let's take a look at some examples that show how to accomplish most
 -- typical tasks with help of the library.
@@ -52,9 +52,6 @@ module Codec.Archive.Zip
   , ExtraField (..)
     -- ** Archive description
   , ArchiveDescription (..)
-  , SplitOption
-  , noSplit
-  , splitSize
     -- * Archive monad
   , ZipArchive
   , createArchive
@@ -129,7 +126,6 @@ newtype ZipArchive a = ZipArchive
 
 data ZipState = ZipState
   { zsFilePath  :: Path Abs File      -- ^ Absolute path to zip archive
-  , zsSplitSize :: SplitSize          -- ^ How to split the archive
   , zsEntries   :: [EntryDescription] -- ^ Actual collection of entries
   , zsArchive   :: ArchiveDescription -- ^ Info about the whole archive
   , zsActions   :: [PendingAction]    -- ^ Pending actions
@@ -142,7 +138,6 @@ data ZipState = ZipState
 
 createArchive :: MonadIO m
   => Path b File       -- ^ Location of archive file to create
-  -> SplitSize         -- ^ Size of file for split archives
   -> ZipArchive a      -- ^ Actions that form archive's content
   -> m a
 createArchive = undefined
@@ -162,7 +157,6 @@ createArchive = undefined
 
 withArchive :: MonadIO m
   => Path b File       -- ^ Location of archive to work with
-  -> SplitSize         -- ^ Size of file for split archives
   -> ZipArchive a      -- ^ Actions on that archive
   -> m a
 withArchive = undefined

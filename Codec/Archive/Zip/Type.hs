@@ -25,11 +25,7 @@ module Codec.Archive.Zip.Type
   , CompressionMethod (..)
   , ExtraField (..)
     -- * Archive desrciption
-  , ArchiveDescription (..)
-  , SplitOption
-  , noSplit
-  , splitSize
-  , getSplitSize )
+  , ArchiveDescription (..) )
 where
 
 import Control.Arrow ((>>>))
@@ -173,32 +169,4 @@ data ExtraField = ExtraField Natural ByteString
 -- | Information about archive as a whole.
 
 data ArchiveDescription = ArchiveDescription
-  { adComment    :: Maybe Text
-  , adDiskNumber :: Natural }
-
--- | How to split archive into several files with upper limit on length. Use
--- the 'noSplit' and 'splitSize' smart constructors to create values of this
--- type.
-
-data SplitOption
-  = NoSplit
-  | SplitSize Natural
-
--- | Create 'SplitOption' value that indicates that no splitting should be
--- performed.
-
-noSplit :: SplitOption
-noSplit = NoSplit
-
--- | Create 'SplitOption' value given maximum size of archive file in
--- bytes. Minimal split size is 1 KB, if you pass something lesser than
--- that, it's equivalent to no splitting at all.
-
-splitSize :: Natural -> SplitOption
-splitSize x = if x < 1024 then NoSplit else SplitSize x
-
--- | Get split size.
-
-getSplitSize :: SplitOption -> Maybe Natural
-getSplitSize NoSplit       = Nothing
-getSplitSize (SplitSize x) = Just x
+  { adComment    :: Maybe Text }
