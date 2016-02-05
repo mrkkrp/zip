@@ -64,16 +64,18 @@ module Codec.Archive.Zip
   , sourceEntry
   , saveEntry
   , unpackInto
-  , getArchiveDescription
+  , getArchiveComment
     -- * Modifying archive
     -- ** Adding entries
   , addEntry
   , sinkEntry
   , loadEntry
+  , copyEntry
   , packDirRecur
     -- ** Modifying entries
   , renameEntry
   , deleteEntry
+  , recompress
   , setEntryComment
   , deleteEntryComment
   , setModTime
@@ -113,15 +115,22 @@ import qualified Data.Map.Strict as M
 -- | Bad things that can happen when you use the library.
 
 data ZipException
-  = EntryDoesNotExist EntrySelector -- ^ Requested entry does not exist
-  | ExtraFieldDoesNotExist EntrySelector Natural -- ^ No such extra field
+  = EntryDoesNotExist       (Path Abs File) EntrySelector
+  | EntryAlreadyExists      (Path Abs File) EntrySelector
+  | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
+  | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
   deriving (Typeable)
 
 instance Show ZipException where
-  show (EntryDoesNotExist s) =
-    "No such entry found: " ++ show s
-  show (ExtraFieldDoesNotExist s n) =
-    "No such extra field: " ++ show s ++ " " ++ show n
+  show (EntryDoesNotExist file s) =
+    "No such entry found: " ++ show s ++ " in " ++ show file
+  show (EntryAlreadyExists file s) =
+    "Entry already exists: " ++ show s ++ " in " ++ show file
+  show (ExtraFieldDoesNotExist file s n) =
+    "No such extra field: " ++ show s ++ " " ++ show n ++ " in " ++ show file
+  show (ExtraFieldAlreadyExists file s n) =
+    "Extra field already exists: " ++
+    show s ++ " " ++ show n ++ " in " ++ show file
 
 instance Exception ZipException
 
@@ -271,6 +280,14 @@ loadEntry
   -> ZipArchive ()
 loadEntry = undefined
 
+-- | Copy entry “as is” from another .ZIP archive.
+
+copyEntry
+  :: Path b File       -- ^ Path to archive to copy from
+  -> EntrySelector     -- ^ Name of entry to copy
+  -> ZipArchive ()
+copyEntry = undefined
+
 -- | Add entire directory to archive. Please note that due to design of the
 -- library, empty directories cannot be added to archive, just like in Git.
 --
@@ -295,6 +312,14 @@ renameEntry = undefined
 
 deleteEntry :: EntrySelector -> ZipArchive ()
 deleteEntry = undefined
+
+-- | Change compression method of an entry.
+
+recompress
+  :: CompressionMethod
+  -> EntrySelector
+  -> ZipArchive ()
+recompress = undefined
 
 -- | Set entry comment.
 
