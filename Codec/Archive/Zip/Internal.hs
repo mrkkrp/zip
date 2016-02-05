@@ -39,6 +39,8 @@ data PendingAction
   | AddEntry
   | RemoveEntry
 
+-- | Throws 'MultiDiskArchive'.
+
 scanArchive
   :: Path Abs File
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)

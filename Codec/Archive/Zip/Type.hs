@@ -182,6 +182,7 @@ data ZipException
   | EntryAlreadyExists      (Path Abs File) EntrySelector
   | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
   | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
+  | MultiDiskArchive        (Path Abs File)
   deriving (Typeable)
 
 instance Show ZipException where
@@ -194,5 +195,7 @@ instance Show ZipException where
   show (ExtraFieldAlreadyExists file s n) =
     "Extra field already exists: " ++
     show s ++ " " ++ show n ++ " in " ++ show file
+  show (MultiDiskArchive file) =
+    "Cannot handle multi-disk archive: " ++ show file
 
 instance Exception ZipException

@@ -176,6 +176,9 @@ createArchive path m = do
 --
 --     * @isPermissionError@ if the user does not have permission to open
 --     the file.
+--
+--     * 'MultiDiskArchive' if the archive consists of multiple parts
+--     (files).
 
 withArchive :: (MonadIO m, MonadThrow m)
   => Path b File       -- ^ Location of archive to work with
