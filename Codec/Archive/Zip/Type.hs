@@ -145,7 +145,6 @@ data EntryDescription = EntryDescription
   , edModified         :: UTCTime
   , edCompressedSize   :: Natural
   , edUncompressedSize :: Natural
-  , edSelector         :: EntrySelector
   , edComment          :: Maybe Text
   , edExtraFields      :: [ExtraField] }
 

@@ -91,16 +91,18 @@ import Codec.Archive.Zip.Internal
 import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Monad.Trans.Resource (ResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink)
+import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Numeric.Natural
 import Path
 import Path.IO
 import qualified Data.ByteString as B
+import qualified Data.Map.Strict as M
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -126,7 +128,8 @@ newtype ZipArchive a = ZipArchive
 
 data ZipState = ZipState
   { zsFilePath  :: Path Abs File      -- ^ Absolute path to zip archive
-  , zsEntries   :: [EntryDescription] -- ^ Actual collection of entries
+  , zsEntries   :: Map EntrySelector EntryDescription
+    -- ^ Actual collection of entries
   , zsArchive   :: ArchiveDescription -- ^ Info about the whole archive
   , zsActions   :: [PendingAction]    -- ^ Pending actions
   }
@@ -167,7 +170,7 @@ withArchive = undefined
 -- | Retrieve description of all archive entries. This is an efficient
 -- operation that can be used for example to list all entries in archive.
 
-getEntries :: ZipArchive [EntryDescription]
+getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = undefined
 
 -- | Get contents of specific archive entry as a lazy 'BL.ByteString'. It's
@@ -206,17 +209,17 @@ saveEntry = undefined
 
 unpackInto :: Path b Dir -> ZipArchive ()
 unpackInto dir = do
-  entries <- getEntries
+  entries <- M.keys <$> getEntries
   unless (null entries) $ do
     liftIO' (ensureDir dir)
-    forM_ entries $ \EntryDescription {..} ->
+    forM_ entries $ \selector ->
       -- TODO Create sub-directories as needed
-      saveEntry edSelector (dir </> unEntrySelector edSelector)
+      saveEntry selector (dir </> unEntrySelector selector)
 
 -- | Get archive comment.
 
-getArchiveDescription :: ZipArchive ArchiveDescription
-getArchiveDescription = undefined
+getArchiveComment :: ZipArchive (Maybe Text)
+getArchiveComment = undefined
 
 ----------------------------------------------------------------------------
 -- Modifying archive
@@ -337,10 +340,7 @@ undoArchiveChanges = undefined
 -- | Undo all changes made in this editing session.
 
 undoAll :: ZipArchive ()
-undoAll = do
-  undoArchiveChanges
-  entries <- getEntries
-  mapM_ undoEntryChanges (edSelector <$> entries)
+undoAll = ZipArchive . modify $ \s -> s { zsActions = [] }
 
 -- | Archive contents are not modified instantly, but instead changes are
 -- collected as sort of “pending actions” that should be committed. The
