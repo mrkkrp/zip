@@ -52,6 +52,8 @@ module Codec.Archive.Zip
   , ExtraField (..)
     -- ** Archive description
   , ArchiveDescription (..)
+    -- ** Exceptions
+  , ZipException (..)
     -- * Archive monad
   , ZipArchive
   , createArchive
@@ -98,11 +100,30 @@ import Data.Conduit (Source, Sink)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
+import Data.Typeable (Typeable)
 import Numeric.Natural
 import Path
 import Path.IO
 import qualified Data.ByteString as B
 import qualified Data.Map.Strict as M
+
+----------------------------------------------------------------------------
+-- Exceptions
+
+-- | Bad things that can happen when you use the library.
+
+data ZipException
+  = EntryDoesNotExist EntrySelector -- ^ Requested entry does not exist
+  | ExtraFieldDoesNotExist EntrySelector Natural -- ^ No such extra field
+  deriving (Typeable)
+
+instance Show ZipException where
+  show (EntryDoesNotExist s) =
+    "No such entry found: " ++ show s
+  show (ExtraFieldDoesNotExist s n) =
+    "No such extra field: " ++ show s ++ " " ++ show n
+
+instance Exception ZipException
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -180,7 +201,7 @@ getEntries = undefined
 getEntry
   :: EntrySelector
      -- ^ Selector that identifies archive entry
-  -> ZipArchive (Maybe ByteString)
+  -> ZipArchive ByteString
      -- ^ Contents of the entry (if found)
 getEntry = undefined
 
@@ -191,17 +212,16 @@ sourceEntry
      -- ^ Selector that identifies archive entry
   -> Sink B.ByteString (ResourceT ZipArchive) a
      -- ^ Sink where to stream entry contents
-  -> ZipArchive (Maybe a)
+  -> ZipArchive a
      -- ^ Contents of the entry (if found)
 sourceEntry = undefined
 
--- | Save specific archive entry as a file in file system. This tries to
--- restore file attributes if possible.
+-- | Save specific archive entry as a file in file system.
 
 saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
   -> Path b File       -- ^ Where to save the file
-  -> ZipArchive Bool   -- ^ Was the file found in the archive?
+  -> ZipArchive ()     -- ^ Was the file found in the archive?
 saveEntry = undefined
 
 -- | Unpack entire archive into specified directory. The directory will be
@@ -230,7 +250,7 @@ addEntry
   :: CompressionMethod -- ^ Compression method to use
   -> ByteString        -- ^ Entry contents
   -> EntrySelector     -- ^ Name of entry to add
-  -> ZipArchive Bool   -- ^ 'True' if successfully added
+  -> ZipArchive ()
 addEntry = undefined
 
 -- | Stream data from the specified source to an archive entry.
@@ -239,7 +259,7 @@ sinkEntry
   :: CompressionMethod -- ^ Compression method to use
   -> Source (ResourceT ZipArchive) ByteString -- ^ Source of entry content
   -> EntrySelector     -- ^ Name of entry to add
-  -> ZipArchive Bool   -- ^ 'True' if successfully added
+  -> ZipArchive ()
 sinkEntry = undefined
 
 -- | Load entry from given file.
@@ -248,7 +268,7 @@ loadEntry
   :: CompressionMethod -- ^ Compression method to use
   -> (Path Abs File -> EntrySelector) -- ^ How to get 'EntrySelector'
   -> Path b File       -- ^ Path to file to add
-  -> ZipArchive Bool   -- ^ 'True' if successfully added
+  -> ZipArchive ()
 loadEntry = undefined
 
 -- | Add entire directory to archive. Please note that due to design of the
@@ -268,14 +288,12 @@ packDirRecur = undefined
 renameEntry
   :: EntrySelector     -- ^ Old entry name
   -> EntrySelector     -- ^ New entry name
-  -> ZipArchive Bool   -- ^ 'True' if the entry has been renamed
+  -> ZipArchive ()
 renameEntry = undefined
 
 -- | Delete entry from archive.
 
-deleteEntry
-  :: EntrySelector     -- ^ Name of entry to delete
-  -> ZipArchive Bool   -- ^ 'True' if the entry has been deleted
+deleteEntry :: EntrySelector -> ZipArchive ()
 deleteEntry = undefined
 
 -- | Set entry comment.
@@ -283,14 +301,12 @@ deleteEntry = undefined
 setEntryComment
   :: Text              -- ^ Text of the comment
   -> EntrySelector     -- ^ Name of entry to comment upon
-  -> ZipArchive Bool   -- ^ 'True' on success
+  -> ZipArchive ()
 setEntryComment = undefined
 
 -- | Delete entry's comment.
 
-deleteEntryComment
-  :: EntrySelector     -- ^ Name of entry to modify
-  -> ZipArchive Bool   -- ^ 'True' on success
+deleteEntryComment :: EntrySelector -> ZipArchive ()
 deleteEntryComment = undefined
 
 -- | Set “last modification” date\/time.
@@ -298,7 +314,7 @@ deleteEntryComment = undefined
 setModTime
   :: UTCTime           -- ^ New modification time
   -> EntrySelector     -- ^ Name of entry to modify
-  -> ZipArchive Bool   -- ^ 'True' on success
+  -> ZipArchive ()
 setModTime = undefined
 
 -- | Add an extra field.
@@ -314,7 +330,7 @@ addExtraField = undefined
 deleteExtraField
   :: Natural           -- ^ Type of extra field to delete
   -> EntrySelector     -- ^ Name of entry to modify
-  -> ZipArchive Bool   -- ^ 'True' in success
+  -> ZipArchive ()
 deleteExtraField = undefined
 
 -- | Set comment of entire archive.
