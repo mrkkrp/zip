@@ -10,18 +10,52 @@
 -- Low-level, non-public concepts and operations.
 
 module Codec.Archive.Zip.Internal
-  ( PendingAction
+  ( PendingAction (..)
+  , scanArchive
+  , getEntry
+  , sourceEntry
   )
 where
 
+import Codec.Archive.Zip.Type
+import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Trans.Resource (ResourceT)
+import Data.ByteString
 import Data.Char (ord)
+import Data.Conduit (Source, Sink)
+import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Path
+import qualified Data.Map.Strict    as M
 import qualified Data.Text          as T
 import qualified Data.Text.Encoding as T
 
+-- | The sum type describes all possible actions that can be performed on
+-- archive.
+
 data PendingAction
-  = AddEntry
+  = DeleteArchive (Path Abs File)
+    -- ^ Delete archive file if it exists
+  | AddEntry
   | RemoveEntry
+
+scanArchive
+  :: Path Abs File
+  -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
+scanArchive = undefined
+
+getEntry
+  :: Path Abs File
+  -> EntryDescription
+  -> IO ByteString
+getEntry = undefined
+
+sourceEntry
+  :: Path Abs File
+  -> EntryDescription
+  -> Sink ByteString (ResourceT IO) a
+  -> IO a
+sourceEntry = undefined
 
 ----------------------------------------------------------------------------
 -- Helpers

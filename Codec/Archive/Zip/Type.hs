@@ -25,7 +25,9 @@ module Codec.Archive.Zip.Type
   , CompressionMethod (..)
   , ExtraField (..)
     -- * Archive desrciption
-  , ArchiveDescription (..) )
+  , ArchiveDescription (..)
+    -- * Exceptions
+  , ZipException (..) )
 where
 
 import Control.Arrow ((>>>))
@@ -168,4 +170,29 @@ data ExtraField = ExtraField Natural ByteString
 -- | Information about archive as a whole.
 
 data ArchiveDescription = ArchiveDescription
-  { adComment    :: Maybe Text }
+  { adComment :: Maybe Text }
+
+----------------------------------------------------------------------------
+-- Exceptions
+
+-- | Bad things that can happen when you use the library.
+
+data ZipException
+  = EntryDoesNotExist       (Path Abs File) EntrySelector
+  | EntryAlreadyExists      (Path Abs File) EntrySelector
+  | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
+  | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
+  deriving (Typeable)
+
+instance Show ZipException where
+  show (EntryDoesNotExist file s) =
+    "No such entry found: " ++ show s ++ " in " ++ show file
+  show (EntryAlreadyExists file s) =
+    "Entry already exists: " ++ show s ++ " in " ++ show file
+  show (ExtraFieldDoesNotExist file s n) =
+    "No such extra field: " ++ show s ++ " " ++ show n ++ " in " ++ show file
+  show (ExtraFieldAlreadyExists file s n) =
+    "Extra field already exists: " ++
+    show s ++ " " ++ show n ++ " in " ++ show file
+
+instance Exception ZipException

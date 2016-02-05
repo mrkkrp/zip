@@ -91,7 +91,6 @@ module Codec.Archive.Zip
   , commit )
 where
 
-import Codec.Archive.Zip.Internal
 import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
@@ -100,39 +99,17 @@ import Control.Monad.Trans.Resource (ResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink)
 import Data.Map.Strict (Map)
+import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
-import Data.Typeable (Typeable)
 import Numeric.Natural
 import Path
 import Path.IO
-import qualified Data.ByteString as B
-import qualified Data.Map.Strict as M
-
-----------------------------------------------------------------------------
--- Exceptions
-
--- | Bad things that can happen when you use the library.
-
-data ZipException
-  = EntryDoesNotExist       (Path Abs File) EntrySelector
-  | EntryAlreadyExists      (Path Abs File) EntrySelector
-  | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
-  | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
-  deriving (Typeable)
-
-instance Show ZipException where
-  show (EntryDoesNotExist file s) =
-    "No such entry found: " ++ show s ++ " in " ++ show file
-  show (EntryAlreadyExists file s) =
-    "Entry already exists: " ++ show s ++ " in " ++ show file
-  show (ExtraFieldDoesNotExist file s n) =
-    "No such extra field: " ++ show s ++ " " ++ show n ++ " in " ++ show file
-  show (ExtraFieldAlreadyExists file s n) =
-    "Extra field already exists: " ++
-    show s ++ " " ++ show n ++ " in " ++ show file
-
-instance Exception ZipException
+import qualified Codec.Archive.Zip.Internal as I
+import qualified Data.Conduit.Binary        as CB
+import qualified Data.Map.Strict            as M
+import qualified Data.Sequence              as S
+import qualified Data.Set                   as E
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -157,11 +134,14 @@ newtype ZipArchive a = ZipArchive
 -- | Internal state record used by the 'ZipArchive' monad.
 
 data ZipState = ZipState
-  { zsFilePath  :: Path Abs File      -- ^ Absolute path to zip archive
+  { zsFilePath  :: Path Abs File
+    -- ^ Absolute path to zip archive
   , zsEntries   :: Map EntrySelector EntryDescription
     -- ^ Actual collection of entries
-  , zsArchive   :: ArchiveDescription -- ^ Info about the whole archive
-  , zsActions   :: [PendingAction]    -- ^ Pending actions
+  , zsArchive   :: ArchiveDescription
+    -- ^ Info about the whole archive
+  , zsActions   :: Seq I.PendingAction
+    -- ^ Pending actions
   }
 
 -- | Create new archive given its location and action that describes how to
@@ -169,11 +149,20 @@ data ZipState = ZipState
 -- file if it already exists. See 'withArchive' if you want to work with
 -- existing archive.
 
-createArchive :: MonadIO m
+createArchive :: (MonadIO m, MonadCatch m)
   => Path b File       -- ^ Location of archive file to create
   -> ZipArchive a      -- ^ Actions that form archive's content
   -> m a
-createArchive = undefined
+createArchive path m = do
+  apath <- makeAbsolute path
+  ignoringAbsence (removeFile apath)
+  let st = ZipState
+        { zsFilePath = apath
+        , zsEntries  = M.empty
+        , zsArchive  = ArchiveDescription Nothing
+        , zsActions  = S.empty }
+      action = unZipArchive (liftM2 const m commit)
+  liftIO (evalStateT action st)
 
 -- | Work with already existing archive. See 'createArchive' if you want to
 -- create new archive instead.
@@ -188,11 +177,20 @@ createArchive = undefined
 --     * @isPermissionError@ if the user does not have permission to open
 --     the file.
 
-withArchive :: MonadIO m
+withArchive :: (MonadIO m, MonadThrow m)
   => Path b File       -- ^ Location of archive to work with
   -> ZipArchive a      -- ^ Actions on that archive
   -> m a
-withArchive = undefined
+withArchive path m = do
+  apath           <- makeAbsolute path
+  (desc, entries) <- liftIO (I.scanArchive apath)
+  let st = ZipState
+        { zsFilePath = apath
+        , zsEntries  = entries
+        , zsArchive  = desc
+        , zsActions  = S.empty }
+      action = unZipArchive (liftM2 const m commit)
+  liftIO (evalStateT action st)
 
 ----------------------------------------------------------------------------
 -- Retrieving information
@@ -201,54 +199,72 @@ withArchive = undefined
 -- operation that can be used for example to list all entries in archive.
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
-getEntries = undefined
+getEntries = ZipArchive (gets zsEntries)
 
 -- | Get contents of specific archive entry as a lazy 'BL.ByteString'. It's
 -- not recommended to use this on big entries, because it will suck out a
 -- lot of memory. For big entries, use conduits: 'sourceEntry'.
+--
+-- Throws: 'EntryDoesNotExist'.
 
 getEntry
   :: EntrySelector
      -- ^ Selector that identifies archive entry
   -> ZipArchive ByteString
      -- ^ Contents of the entry (if found)
-getEntry = undefined
+getEntry s = do
+  path  <- getFilePath
+  mdesc <- M.lookup s <$> getEntries
+  case mdesc of
+    Nothing   -> throwM (EntryDoesNotExist path s)
+    Just desc -> liftIO' (I.getEntry path desc)
 
 -- | Stream contents of archive entry to specified 'Sink'.
+--
+-- Throws: 'EntryDoesNotExist'.
 
 sourceEntry
   :: EntrySelector
      -- ^ Selector that identifies archive entry
-  -> Sink B.ByteString (ResourceT ZipArchive) a
+  -> Sink ByteString (ResourceT IO) a
      -- ^ Sink where to stream entry contents
   -> ZipArchive a
      -- ^ Contents of the entry (if found)
-sourceEntry = undefined
+sourceEntry s sink = do
+  path  <- getFilePath
+  mdesc <- M.lookup s <$> getEntries
+  case mdesc of
+    Nothing   -> throwM (EntryDoesNotExist path s)
+    Just desc -> liftIO' (I.sourceEntry path desc sink)
 
 -- | Save specific archive entry as a file in file system.
+--
+-- Throws: 'EntryDoesNotExist'.
 
 saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
   -> Path b File       -- ^ Where to save the file
   -> ZipArchive ()     -- ^ Was the file found in the archive?
-saveEntry = undefined
+saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
 
 -- | Unpack entire archive into specified directory. The directory will be
 -- created if it does not exist.
 
 unpackInto :: Path b Dir -> ZipArchive ()
-unpackInto dir = do
-  entries <- M.keys <$> getEntries
-  unless (null entries) $ do
+unpackInto dir' = do
+  selectors <- M.keysSet <$> getEntries
+  unless (null selectors) $ do
+    dir <- liftIO' (makeAbsolute dir')
     liftIO' (ensureDir dir)
-    forM_ entries $ \selector ->
-      -- TODO Create sub-directories as needed
-      saveEntry selector (dir </> unEntrySelector selector)
+    let dirs = E.map (parent . (dir </>) . unEntrySelector) selectors
+    forM_ dirs (liftIO' . ensureDir)
+    forM_ selectors $ \s ->
+      saveEntry s (dir </> unEntrySelector s)
 
 -- | Get archive comment.
 
 getArchiveComment :: ZipArchive (Maybe Text)
-getArchiveComment = undefined
+getArchiveComment = ZipArchive (gets (adComment . zsArchive))
 
 ----------------------------------------------------------------------------
 -- Modifying archive
@@ -381,7 +397,7 @@ undoArchiveChanges = undefined
 -- | Undo all changes made in this editing session.
 
 undoAll :: ZipArchive ()
-undoAll = ZipArchive . modify $ \s -> s { zsActions = [] }
+undoAll = ZipArchive . modify $ \s -> s { zsActions = S.empty }
 
 -- | Archive contents are not modified instantly, but instead changes are
 -- collected as sort of “pending actions” that should be committed. The
@@ -395,6 +411,11 @@ commit = undefined
 
 ----------------------------------------------------------------------------
 -- Helpers
+
+-- | Get path of actual archive file from inside of 'ZipArchive' monad.
+
+getFilePath :: ZipArchive (Path Abs File)
+getFilePath = ZipArchive (gets zsFilePath)
 
 -- | We do not permit arbitrary 'IO' inside 'ZipArchive' for users of the
 -- library, but we can cheat and do it ourselves.
