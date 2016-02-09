@@ -11,9 +11,12 @@
 
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
+  , targetEntry
   , scanArchive
   , getEntry
   , sourceEntry
+  , withOptimizedActions
+  , commit
   )
 where
 
@@ -24,7 +27,10 @@ import Data.ByteString
 import Data.Char (ord)
 import Data.Conduit (Source, Sink)
 import Data.Map.Strict (Map)
+import Data.Sequence (Seq)
 import Data.Text (Text)
+import Data.Time.Clock (UTCTime)
+import Numeric.Natural (Natural)
 import Path
 import qualified Data.Map.Strict    as M
 import qualified Data.Text          as T
@@ -36,8 +42,25 @@ import qualified Data.Text.Encoding as T
 data PendingAction
   = DeleteArchive (Path Abs File)
     -- ^ Delete archive file if it exists
-  | AddEntry
-  | RemoveEntry
+  | AddEntry CompressionMethod ByteString EntrySelector
+  | SinkEntry CompressionMethod (Source (ResourceT IO) ByteString) EntrySelector
+  | LoadEntry CompressionMethod (Path Abs File) EntrySelector
+  | CopyEntry (Path Abs File) EntrySelector
+  | RenameEntry EntrySelector EntrySelector
+  | DeleteEntry EntrySelector
+  | Recompress CompressionMethod EntrySelector
+  | SetEntryComment Text EntrySelector
+  | DeleteEntryComment EntrySelector
+  | SetModTime UTCTime EntrySelector
+  | AddExtraField ExtraField EntrySelector
+  | DeleteExtraField Natural EntrySelector
+  | SetArchiveComment Text
+  | DeleteArchiveComment
+
+-- | Determine target entry of action.
+
+targetEntry :: PendingAction -> Maybe EntrySelector
+targetEntry = undefined
 
 -- | Throws 'MultiDiskArchive'.
 
@@ -58,6 +81,17 @@ sourceEntry
   -> Sink ByteString (ResourceT IO) a
   -> IO a
 sourceEntry = undefined
+
+withOptimizedActions
+  :: Path Abs File
+  -> ArchiveDescription -- ???
+  -> Seq PendingAction
+  -> (Seq PendingAction -> IO ())
+  -> IO ()
+withOptimizedActions = undefined
+
+commit :: Seq PendingAction -> IO ()
+commit = undefined
 
 ----------------------------------------------------------------------------
 -- Helpers
