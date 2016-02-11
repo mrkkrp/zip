@@ -21,20 +21,26 @@ module Codec.Archive.Zip.Internal
 where
 
 import Codec.Archive.Zip.Type
-import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Trans.Resource (ResourceT)
+import Control.Monad.Catch
+import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.ByteString
 import Data.Char (ord)
-import Data.Conduit (Source, Sink)
+import Data.Conduit (Source, Sink, ($=), ($$))
 import Data.Map.Strict (Map)
 import Data.Sequence (Seq)
+import Data.Serialize
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Numeric.Natural (Natural)
 import Path
-import qualified Data.Map.Strict    as M
-import qualified Data.Text          as T
-import qualified Data.Text.Encoding as T
+import System.IO
+import qualified Data.ByteString     as B
+import qualified Data.Conduit.Binary as CB
+import qualified Data.Conduit.List   as CL
+import qualified Data.Conduit.BZlib  as BZ
+import qualified Data.Conduit.Zlib   as Z
+import qualified Data.Map.Strict     as M
+import qualified Data.Text           as T
 
 -- | The sum type describes all possible actions that can be performed on
 -- archive.
@@ -90,12 +96,27 @@ targetEntry DeleteArchiveComment   = Nothing
 -- | Scan central directory of an archive and return its description
 -- 'ArchiveDescription' as well as collection of its entries.
 --
--- Throws 'MultiDiskArchive'.
+-- Throws 'ParsingFailed', 'MultiDiskArchive', and 'InvalidEntrySelector'
+-- (among other stuff).
 
 scanArchive
   :: Path Abs File     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
-scanArchive = undefined
+scanArchive path = withFile (toFilePath path) ReadMode $ \h ->
+  case locateECD h of
+    Just ecdOffset -> do
+      hSeek h AbsoluteSeek ecdOffset
+      ecdRaw <- B.hGetContents h
+      case runGet getECD ecdRaw of
+        Left  msg -> throwM (ParsingFailed path msg)
+        Right ecd -> do
+          hSeek h AbsoluteSeek $ fromIntegral (adCDOffset ecd)
+          cdRaw <- B.hGet h $ fromIntegral (adCDSize ecd)
+          case runGet getCD cdRaw of
+            Left  msg -> throwM (ParsingFailed path msg)
+            Right cd  -> return (ecd, cd)
+    Nothing ->
+      throwM (ParsingFailed path "Cannot locate end of central directory")
 
 -- | Given location of archive and information about specific archive entry
 -- 'EntryDescription', return its contents as strict 'ByteString'. Returned
@@ -105,7 +126,7 @@ getEntry
   :: Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> IO ByteString     -- ^ Decompressed binary data
-getEntry = undefined
+getEntry path desc = sourceEntry path desc (CL.foldMap id)
 
 -- | The same as 'getEntry', but archive contents are not returned directly,
 -- but instead are streamed to given 'Sink'.
@@ -115,7 +136,18 @@ sourceEntry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Sink ByteString (ResourceT IO) a -- ^ Where to stream decompressed data
   -> IO a
-sourceEntry = undefined
+sourceEntry path ed@EntryDescription {..} sink = runResourceT $
+  source $= CB.isolate (fromIntegral edCompressedSize) $= decompress $$ sink
+  where
+    source = CB.sourceIOHandle $ do
+      h      <- openFile (toFilePath path) ReadMode
+      offset <- fileDataOffset h ed
+      hSeek h AbsoluteSeek offset
+      return h
+    decompress = case edCompression of
+      Store   -> CL.map id
+      Deflate -> Z.decompress Z.defaultWindowBits
+      BZip2   -> BZ.bunzip2
 
 -- | Transform given pending actions so they can be performed efficiently in
 -- one pass. The action also prepares environment when necessary
@@ -131,7 +163,7 @@ withOptimizedActions
   -> IO ()
 withOptimizedActions = undefined
 
--- | Undertake /all/ actions specified in the first argument of the
+-- | Undertake /all/ actions specified in the second argument of the
 -- function.
 
 commit
@@ -141,7 +173,32 @@ commit
 commit = undefined
 
 ----------------------------------------------------------------------------
+-- Binary serialization
+
+-- | Parse end of central directory record or Zip64 end of central directory
+-- record depending on signature binary data begins with.
+
+getECD :: Get ArchiveDescription
+getECD = undefined
+
+-- | Parse central directory file headers and put them into 'Map'.
+
+getCD :: Get (Map EntrySelector EntryDescription)
+getCD = undefined
+
+-- | Find absolute offset of end of central directory record or, if present,
+-- Zip64 end of central directory record.
+
+locateECD :: Handle -> Maybe Integer
+locateECD = undefined
+
+----------------------------------------------------------------------------
 -- Helpers
+
+-- | Calculate file data offset from its 'EntryDescription'.
+
+fileDataOffset :: Handle -> EntryDescription -> IO Integer
+fileDataOffset = undefined
 
 -- | Detect if the given text needs newer Unicode-aware features to be
 -- properly encoded in archive.

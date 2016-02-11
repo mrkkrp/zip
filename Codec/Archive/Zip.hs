@@ -159,7 +159,7 @@ createArchive path m = do
   let st = ZipState
         { zsFilePath = apath
         , zsEntries  = M.empty
-        , zsArchive  = ArchiveDescription Nothing
+        , zsArchive  = ArchiveDescription Nothing 0 0
         , zsActions  = S.empty }
       action = unZipArchive (liftM2 const m commit)
   liftIO (evalStateT action st)

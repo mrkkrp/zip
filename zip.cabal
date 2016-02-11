@@ -54,6 +54,7 @@ flag dev
 library
   build-depends:      base             >= 4.8 && < 5
                     , bytestring       >= 0.9
+                    , bzlib-conduit    >= 0.2
                     , case-insensitive >= 1.2.0.2
                     , cereal           >= 0.3
                     , conduit          >= 1.1

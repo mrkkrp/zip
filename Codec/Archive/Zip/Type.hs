@@ -171,7 +171,9 @@ data ExtraField = ExtraField Natural ByteString
 -- | Information about archive as a whole.
 
 data ArchiveDescription = ArchiveDescription
-  { adComment :: Maybe Text }
+  { adComment  :: Maybe Text
+  , adCDOffset :: Natural
+  , adCDSize   :: Natural }
 
 ----------------------------------------------------------------------------
 -- Exceptions
@@ -184,6 +186,8 @@ data ZipException
   | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
   | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
   | MultiDiskArchive        (Path Abs File)
+  -- | UnsupportedCompression  (Path Abs File) EntrySelector
+  | ParsingFailed           (Path Abs File) String
   deriving (Typeable)
 
 instance Show ZipException where
@@ -198,5 +202,9 @@ instance Show ZipException where
     show s ++ " " ++ show n ++ " in " ++ show file
   show (MultiDiskArchive file) =
     "Cannot handle multi-disk archive: " ++ show file
+  -- show (UnsupportedCompression file s) =
+  --   "Unsup"
+  show (ParsingFailed file msg) =
+    "Parsing of archive structure failed: " ++ show msg ++ " in " ++ show file
 
 instance Exception ZipException
