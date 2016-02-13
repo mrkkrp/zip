@@ -36,7 +36,7 @@ import Data.Serialize
 import Data.Text (Text)
 import Data.Time
 import Data.Version
-import Data.Word (Word16)
+import Data.Word (Word16, Word32)
 import Numeric.Natural (Natural)
 import Path
 import System.IO
@@ -155,17 +155,21 @@ sourceEntry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Sink ByteString (ResourceT IO) a -- ^ Where to stream uncompressed data
   -> IO a
-sourceEntry path ed@EntryDescription {..} sink = runResourceT $
+sourceEntry path EntryDescription {..} sink = runResourceT $
   source $= CB.isolate (fromIntegral edCompressedSize) $= decompress $$ sink
   where
     source = CB.sourceIOHandle $ do
-      h      <- openFile (toFilePath path) ReadMode
-      offset <- fileDataOffset h ed
-      hSeek h AbsoluteSeek offset
-      return h
+      h <- openFile (toFilePath path) ReadMode
+      hSeek h AbsoluteSeek (fromIntegral edOffset)
+      localHeader <- B.hGet h 30
+      case runGet getLocalHeaderGap localHeader of
+        Left msg -> throwM (ParsingFailed path msg)
+        Right gap -> do
+          hSeek h RelativeSeek gap
+          return h
     decompress = case edCompression of
       Store   -> CL.map id
-      Deflate -> Z.decompress Z.defaultWindowBits
+      Deflate -> Z.decompress $ Z.WindowBits (-15)
       BZip2   -> BZ.bunzip2
 
 -- | Transform given pending actions so they can be performed efficiently in
@@ -243,9 +247,7 @@ getCD = M.fromList . catMaybes <$> many getCDEntry
 
 getCDEntry :: Get (Maybe (EntrySelector, EntryDescription))
 getCDEntry = do
-  sig <- getWord32le -- central file header signature
-  unless (sig == 0x02014b50) $
-    fail "Expected central directory file header signature"
+  getSignature 0x02014b50 -- central file header signature
   versionMadeBy  <- toVersion <$> getWord16le -- version made by
   versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
   bitFlag        <- getWord16le -- general purpose bit flag
@@ -301,6 +303,33 @@ getExtraField = do
   body   <- getBytes (fromIntegral size) -- content
   return (fromIntegral header, body)
 
+-- | Extract number of bytes between start of file name in local header and
+-- start of actual data.
+
+getLocalHeaderGap :: Get Integer
+getLocalHeaderGap = do
+  getSignature 0x04034b50
+  skip 2 -- version needed to extract
+  skip 2 -- general purpose bit flag
+  skip 2 -- compression method
+  skip 2 -- last mod file time
+  skip 2 -- last mod file date
+  skip 4 -- crc-32 check sum
+  skip 4 -- compressed size
+  skip 4 -- uncompressed size
+  fileNameSize   <- fromIntegral <$> getWord16le -- file name length
+  extraFieldSize <- fromIntegral <$> getWord16le -- extra field length
+  return (fileNameSize + extraFieldSize)
+
+-- | Get signature. If extracted data is not equal to provided signature,
+-- fail.
+
+getSignature :: Word32 -> Get ()
+getSignature sig = do
+  x <- getWord32le -- grab 4-byte signature
+  unless (x == sig) . fail $
+    "Expected signature " ++ show sig ++ ", but got: " ++ show x
+
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
 
@@ -309,11 +338,6 @@ locateECD = fmap (Just . subtract 22) . hFileSize -- FIXME
 
 ----------------------------------------------------------------------------
 -- Helpers
-
--- | Calculate file data offset from its 'EntryDescription'.
-
-fileDataOffset :: Handle -> EntryDescription -> IO Integer
-fileDataOffset = undefined
 
 -- | Detect if the given text needs newer Unicode-aware features to be
 -- properly encoded in archive.
