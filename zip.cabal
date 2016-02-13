@@ -73,6 +73,7 @@ library
                     , time             >= 1.4
                     , transformers     >= 0.3
   default-extensions: RecordWildCards
+                    , TupleSections
   exposed-modules:    Codec.Archive.Zip
                     , Codec.Archive.Zip.Type
   other-modules:      Codec.Archive.Zip.Internal

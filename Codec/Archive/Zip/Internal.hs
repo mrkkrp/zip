@@ -20,26 +20,34 @@ module Codec.Archive.Zip.Internal
 where
 
 import Codec.Archive.Zip.Type
+import Control.Applicative (many)
+import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Resource (ResourceT, runResourceT)
-import Data.ByteString
+import Data.Bits
+import Data.Bool (bool)
+import Data.ByteString (ByteString)
 import Data.Char (ord)
 import Data.Conduit (Source, Sink, ($=), ($$))
 import Data.Map.Strict (Map)
+import Data.Maybe (fromJust, catMaybes)
 import Data.Sequence (Seq)
 import Data.Serialize
 import Data.Text (Text)
-import Data.Time.Clock (UTCTime)
+import Data.Time
+import Data.Version
+import Data.Word (Word16)
 import Numeric.Natural (Natural)
 import Path
 import System.IO
 import qualified Data.ByteString     as B
+import qualified Data.Conduit.BZlib  as BZ
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List   as CL
-import qualified Data.Conduit.BZlib  as BZ
 import qualified Data.Conduit.Zlib   as Z
 import qualified Data.Map.Strict     as M
 import qualified Data.Text           as T
+import qualified Data.Text.Encoding  as T
 
 -- | The sum type describes all possible actions that can be performed on
 -- archive.
@@ -120,11 +128,13 @@ targetEntry DeleteArchiveComment   = Nothing
 scanArchive
   :: Path Abs File     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
-scanArchive path = withFile (toFilePath path) ReadMode $ \h ->
-  case locateECD h of
+scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
+  mecdOffset <- locateECD h
+  case mecdOffset of
     Just ecdOffset -> do
       hSeek h AbsoluteSeek ecdOffset
-      ecdRaw <- B.hGetContents h
+      ecdSize <- subtract ecdOffset <$> hFileSize h
+      ecdRaw  <- B.hGet h (fromIntegral ecdSize)
       case runGet getECD ecdRaw of
         Left  msg -> throwM (ParsingFailed path msg)
         Right ecd -> do
@@ -188,18 +198,114 @@ commit = undefined -- TODO
 -- record depending on signature binary data begins with.
 
 getECD :: Get ArchiveDescription
-getECD = undefined
+getECD = do
+  sig <- getWord32le -- end of central directory signature
+  let zip64 = sig == 0x06064b50
+  unless (sig == 0x06054b50 || sig == 0x06064b50) $
+    fail "Cannot locate end of central directory"
+  zip64size <- if zip64 then do
+    x <- getWord64le -- size of zip64 end of central directory record
+    skip 2 -- version made by
+    skip 2 -- version needed to extract
+    return (Just x)
+    else return Nothing
+  thisDisk <- bool (fromIntegral <$> getWord16le) getWord32le zip64
+  -- ↑ number of this disk
+  cdDisk   <- bool (fromIntegral <$> getWord16le) getWord32le zip64
+  -- ↑ number of the disk with the start of the central directory
+  unless (thisDisk == 0 && cdDisk == 0) $
+    fail "No support for multi-disk archives"
+  skip (bool 2 8 zip64)
+  -- ↑ total number of entries in the central directory on this disk
+  skip (bool 2 8 zip64)
+  -- ↑ total number of entries in the central directory
+  cdSize   <- bool (fromIntegral <$> getWord32le) getWord64le zip64
+  -- ↑ size of the central directory
+  cdOffset <- bool (fromIntegral <$> getWord32le) getWord64le zip64
+  -- ↑ offset of start of central directory with respect to the starting
+  -- disk number
+  when zip64 . skip . fromIntegral $ fromJust zip64size - 4 -- obviously
+  commentSize <- getWord16le -- .ZIP file comment length
+  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
+  -- ↑ .ZIP file comment
+  return ArchiveDescription
+    { adComment  = if commentSize == 0 then Nothing else Just comment
+    , adCDOffset = fromIntegral cdOffset
+    , adCDSize   = fromIntegral cdSize }
 
 -- | Parse central directory file headers and put them into 'Map'.
 
 getCD :: Get (Map EntrySelector EntryDescription)
-getCD = undefined
+getCD = M.fromList . catMaybes <$> many getCDEntry
+
+-- | Parse single central directory file header. If it's a directory or file
+-- compressed with unsupported compression method, 'Nothing' is returned.
+
+getCDEntry :: Get (Maybe (EntrySelector, EntryDescription))
+getCDEntry = do
+  sig <- getWord32le -- central file header signature
+  unless (sig == 0x02014b50) $
+    fail "Expected central directory file header signature"
+  versionMadeBy  <- toVersion <$> getWord16le -- version made by
+  versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
+  bitFlag        <- getWord16le -- general purpose bit flag
+  when (any (testBit bitFlag) [0,6,13]) $
+    fail "Encrypted archives are not supported"
+  mcompression   <- toCompressionMethod <$> getWord16le -- compression method
+  modTime        <- getWord16le -- last mod file time
+  modDate        <- getWord16le -- last mod file date
+  crc32          <- getWord32le -- CRC32 check sum
+  compressed     <- fromIntegral <$> getWord32le -- compressed size
+  uncompressed   <- fromIntegral <$> getWord32le -- uncompressed size
+  fileNameSize   <- getWord16le -- file name length
+  extraFieldSize <- getWord16le -- extra field length
+  commentSize    <- getWord16le -- file comment size
+  skip 2 -- disk number start
+  skip 2 -- internal file attributes
+  skip 4 -- external file attributes
+  offset         <- fromIntegral <$> getWord32le -- offset of local header
+  fileName       <- T.unpack . T.decodeUtf8 <$>
+    getBytes (fromIntegral fileNameSize) -- file name
+  extraFields    <- M.fromList <$>
+    isolate (fromIntegral extraFieldSize) (many getExtraField)
+  -- ↑ extra fields in their raw form
+  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
+  -- ↑ file comment
+  let mz64ef = M.lookup 1 extraFields >>= parseZip64ExtraFiled
+      with64opt x f =
+        case mz64ef of
+          Nothing -> x
+          Just z64ef -> bool x (f z64ef) (x == 0xffffffff)
+  case mcompression of
+    Nothing -> return Nothing
+    Just compression ->
+      let desc = EntryDescription
+            { edVersionMadeBy    = versionMadeBy
+            , edVersionNeeded    = versionNeeded
+            , edCompression      = compression
+            , edModified         = fromMsDosTime (MsDosTime modDate modTime)
+            , edCRC32            = fromIntegral crc32
+            , edCompressedSize   = with64opt compressed   z64efCompressedSize
+            , edUncompressedSize = with64opt uncompressed z64efUncompressedSize
+            , edOffset           = with64opt offset       z64efOffset
+            , edComment = if commentSize == 0 then Nothing else Just comment
+            , edExtraFields      = extraFields }
+      in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
+
+-- | Parse an extra-field.
+
+getExtraField :: Get (Natural, ByteString)
+getExtraField = do
+  header <- getWord16le -- header id
+  size   <- getWord16le -- data size
+  body   <- getBytes (fromIntegral size) -- content
+  return (fromIntegral header, body)
 
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
 
-locateECD :: Handle -> Maybe Integer
-locateECD = undefined
+locateECD :: Handle -> IO (Maybe Integer)
+locateECD = fmap (Just . subtract 22) . hFileSize -- FIXME
 
 ----------------------------------------------------------------------------
 -- Helpers
@@ -215,3 +321,86 @@ fileDataOffset = undefined
 needsUnicode :: Text -> Bool
 needsUnicode = not . T.all validCP437
   where validCP437 x = let y = ord x in y >= 32 && y <= 126
+
+-- | Convert numeric representation (as per .ZIP specification) of version
+-- into 'Version'.
+
+toVersion :: Word16 -> Version
+toVersion x = makeVersion [major, minor]
+  where (major, minor) = quotRem (fromIntegral $ x .&. 0x00ff) 10
+
+-- | Covert 'Version' to its numeric representation as per .ZIP
+-- specification.
+
+fromVersion :: Version -> Word16
+fromVersion v = fromIntegral (major * 10 + minor)
+  where (major:minor:_) = versionBranch v ++ repeat 0
+
+-- | Get compression method form its numeric representation.
+
+toCompressionMethod :: Word16 -> Maybe CompressionMethod
+toCompressionMethod 0  = Just Store
+toCompressionMethod 8  = Just Deflate
+toCompressionMethod 12 = Just BZip2
+toCompressionMethod _  = Nothing
+
+-- | A temporary data structure to hold Zip64 extra data field information.
+
+data Zip64ExtraField = Zip64ExtraField
+  { z64efUncompressedSize :: Natural
+  , z64efCompressedSize   :: Natural
+  , z64efOffset           :: Natural }
+
+-- | Parse 'Zip64ExtraField' from its binary representation.
+
+parseZip64ExtraFiled :: ByteString -> Maybe Zip64ExtraField
+parseZip64ExtraFiled b = either (const Nothing) Just . flip runGet b $ do
+  uncompressed <- fromIntegral <$> getWord64le -- uncompressed size
+  compressed   <- fromIntegral <$> getWord64le -- compressed size
+  offset       <- fromIntegral <$> getWord64le -- offset of local file header
+  return (Zip64ExtraField uncompressed compressed offset)
+
+-- | MS-DOS date-time: a pair of Word16s (date, time) with the following
+-- structure:
+--
+-- > DATE bit     0 - 4           5 - 8           9 - 15
+-- >      value   day (1 - 31)    month (1 - 12)  years from 1980
+-- > TIME bit     0 - 4           5 - 10          11 - 15
+-- >      value   seconds*        minute          hour
+-- >              *stored in two-second increments
+
+data MsDosTime = MsDosTime
+  { msDosDate :: Word16
+  , msDosTime :: Word16
+  } deriving (Read, Show, Eq)
+
+-- | Convert 'UTCTime' to MS-DOS time format.
+
+toMsDosTime :: UTCTime -> MsDosTime
+toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
+  where
+    dosTime = fromIntegral (seconds + shiftL minutes 5 + shiftL hours 11)
+    dosDate = fromIntegral (day + shiftL month 5 + shiftL year 9)
+
+    seconds = fromEnum (todSec tod) `div` 2
+    minutes = todMin tod
+    hours   = todHour tod
+    tod     = timeToTimeOfDay utctDayTime
+
+    year    = fromIntegral year' - 1980
+    (year', month, day) = toGregorian utctDay
+
+-- | Convert MS-DOS date-time to 'UTCTime'.
+
+fromMsDosTime :: MsDosTime -> UTCTime
+fromMsDosTime MsDosTime {..} = UTCTime
+  (fromGregorian year month day)
+  (secondsToDiffTime $ hours * 60 * 60 + minutes * 60 + seconds)
+  where
+    seconds = fromIntegral $ 2 * (msDosTime .&. 0x1F)
+    minutes = fromIntegral $ shiftR msDosTime 5 .&. 0x3F
+    hours   = fromIntegral (shiftR msDosTime 11)
+
+    day     = fromIntegral (msDosDate .&. 0x1F)
+    month   = fromIntegral $ shiftR msDosDate 5 .&. 0xF
+    year    = 1980 + fromIntegral (shiftR msDosDate 9)
