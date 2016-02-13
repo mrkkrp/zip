@@ -23,7 +23,6 @@ module Codec.Archive.Zip.Type
     -- * Entry description
   , EntryDescription (..)
   , CompressionMethod (..)
-  , ExtraField (..)
     -- * Archive desrciption
   , ArchiveDescription (..)
     -- * Exceptions
@@ -36,6 +35,7 @@ import Control.Monad.Catch (MonadThrow (..))
 import Data.ByteString (ByteString)
 import Data.CaseInsensitive (CI)
 import Data.List.NonEmpty (NonEmpty)
+import Data.Map (Map)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
@@ -141,15 +141,17 @@ instance Exception EntrySelectorException
 -- this date structure and actual archive contents.
 
 data EntryDescription = EntryDescription
-  { edVersionMadeBy    :: Version
-  , edVersionNeeded    :: Version
-  , edCompression      :: CompressionMethod
-  , edModified         :: UTCTime
-  , edCompressedSize   :: Natural
-  , edUncompressedSize :: Natural
-  , edOffset           :: Natural
-  , edComment          :: Maybe Text
-  , edExtraFields      :: [ExtraField] }
+  { edVersionMadeBy    :: Version -- ^ Version made by
+  , edVersionNeeded    :: Version -- ^ Version needed to extract
+  , edCompression      :: CompressionMethod -- ^ Compression method
+  , edModified         :: UTCTime -- ^ Last modification date and time
+  , edCRC32            :: Natural -- ^ CRC32 check sum
+  , edCompressedSize   :: Natural -- ^ Size of compressed entry
+  , edUncompressedSize :: Natural -- ^ Size of uncompressed entry
+  , edOffset           :: Natural -- ^ Absolute offset of local file header
+  , edComment          :: Maybe Text -- ^ Entry comment
+  , edExtraFields      :: Map Natural ByteString -- ^ All extra fields found
+  } deriving (Eq)
 
 -- | Supported compression methods.
 
@@ -159,21 +161,16 @@ data CompressionMethod
   | BZip2              -- ^ Compressed using BZip2 algorithm
     deriving (Eq, Enum, Read, Show)
 
--- | The type represents all extra fields described in the specification as
--- well as a way to store unknown extra fields that can be parsed by the
--- user if he knows what they are.
-
-data ExtraField = ExtraField Natural ByteString
-
 ----------------------------------------------------------------------------
 -- Archive description
 
 -- | Information about archive as a whole.
 
 data ArchiveDescription = ArchiveDescription
-  { adComment  :: Maybe Text
-  , adCDOffset :: Natural
-  , adCDSize   :: Natural }
+  { adComment  :: Maybe Text -- ^ Comment of entire archive
+  , adCDOffset :: Natural -- ^ Absolute offset to start of central directory
+  , adCDSize   :: Natural -- ^ Size of central directory record
+  } deriving (Eq, Show)
 
 ----------------------------------------------------------------------------
 -- Exceptions

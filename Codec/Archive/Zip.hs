@@ -49,7 +49,6 @@ module Codec.Archive.Zip
     -- ** Entry description
   , EntryDescription (..)
   , CompressionMethod (..)
-  , ExtraField (..)
     -- ** Archive description
   , ArchiveDescription (..)
     -- ** Exceptions
@@ -377,10 +376,11 @@ setModTime time s = addPending (I.SetModTime time s)
 -- | Add an extra field.
 
 addExtraField
-  :: ExtraField        -- ^ Extra field to add
+  :: Natural           -- ^ Extra field to add
+  -> ByteString        -- ^ Body of the field
   -> EntrySelector     -- ^ Name of entry to modify
   -> ZipArchive ()     -- ^ 'True' on success
-addExtraField x s = addPending (I.AddExtraField x s)
+addExtraField n b s = addPending (I.AddExtraField n b s)
 
 -- | Delete an extra field by its type.
 
