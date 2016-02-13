@@ -96,8 +96,27 @@ targetEntry DeleteArchiveComment   = Nothing
 -- | Scan central directory of an archive and return its description
 -- 'ArchiveDescription' as well as collection of its entries.
 --
--- Throws 'ParsingFailed', 'MultiDiskArchive', and 'InvalidEntrySelector'
--- (among other stuff).
+-- This operation may fail with:
+--
+--     * @isAlreadyInUseError@ if the file is already open and cannot be
+--     reopened;
+--
+--     * @isDoesNotExistError@ if the file does not exist;
+--
+--     * @isPermissionError@ if the user does not have permission to open
+--     the file;
+--
+--     * 'ParsingFailed' when specified archive is something this library
+--     cannot parse (this includes multi-disk archives, for example).
+--
+-- Please note that entries with invalid (non-portable) file names may be
+-- missing in list of entries. Files that are compressed with unsupported
+-- compression methods are skipped as well. Also, if several entries would
+-- collide on some operating systems (such as Windows, because of its
+-- case-insensitivity), only one of them will be available, because
+-- 'EntrySelector' is case-insensitive. These are consequences of the design
+-- decision to make it impossible to create non-portable archives with this
+-- library.
 
 scanArchive
   :: Path Abs File     -- ^ Path to archive to scan

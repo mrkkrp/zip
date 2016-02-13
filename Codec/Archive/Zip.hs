@@ -176,11 +176,17 @@ createArchive path m = do
 --     * @isPermissionError@ if the user does not have permission to open
 --     the file;
 --
---     * 'MultiDiskArchive' if the archive consists of multiple parts
---     (files); or
+--     * 'ParsingFailed' when specified archive is something this library
+--     cannot parse (this includes multi-disk archives, for example).
 --
---     * 'InvalidEntrySelector' if the archive contains path that is not
---     portable so 'EntrySelector' cannot be built for it.
+-- Please note that entries with invalid (non-portable) file names may be
+-- missing in list of entries. Files that are compressed with unsupported
+-- compression methods are skipped as well. Also, if several entries would
+-- collide on some operating systems (such as Windows, because of its
+-- case-insensitivity), only one of them will be available, because
+-- 'EntrySelector' is case-insensitive. These are consequences of the design
+-- decision to make it impossible to create non-portable archives with this
+-- library.
 
 withArchive :: (MonadIO m, MonadThrow m)
   => Path b File       -- ^ Location of archive to work with

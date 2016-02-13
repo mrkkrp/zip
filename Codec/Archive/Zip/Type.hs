@@ -182,8 +182,6 @@ data ZipException
   | EntryAlreadyExists      (Path Abs File) EntrySelector
   | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
   | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
-  | MultiDiskArchive        (Path Abs File)
-  -- | UnsupportedCompression  (Path Abs File) EntrySelector
   | ParsingFailed           (Path Abs File) String
   deriving (Typeable)
 
@@ -197,11 +195,7 @@ instance Show ZipException where
   show (ExtraFieldAlreadyExists file s n) =
     "Extra field already exists: " ++
     show s ++ " " ++ show n ++ " in " ++ show file
-  show (MultiDiskArchive file) =
-    "Cannot handle multi-disk archive: " ++ show file
-  -- show (UnsupportedCompression file s) =
-  --   "Unsup"
   show (ParsingFailed file msg) =
-    "Parsing of archive structure failed: " ++ show msg ++ " in " ++ show file
+    "Parsing of archive structure failed: \n" ++ msg ++ "\nin " ++ show file
 
 instance Exception ZipException
