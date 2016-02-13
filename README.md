@@ -17,19 +17,18 @@
     * [Encryption](#encryption)
     * [Sources of file data](#sources-of-file-data)
     * [ZIP64](#zip64)
-    * [Unicode in filenames](#unicode-in-filenames)
+    * [Filenames](#filenames)
     * [Meta-information about files](#meta-information-about-files)
-    * [File names](#file-names)
 * [Quick start](#quick-start)
 * [Contribution](#contribution)
 * [License](#license)
 
 This is a feature-rich, memory-efficient, and type-safe library to
-manipulate Zip archives in Haskell. The library is specially written to be
-production-quality and it's long-term supported. In particular, it's created
-with large multimedia data in mind and provides all features users might
-expect, comparable in terms of feature-set with libraries like `libzip` in
-C.
+manipulate Zip archives in Haskell. The library is the most complete and
+efficient implementation of .ZIP specification in pure Haskell (at least
+from open-sourced ones). In particular, it's created with large multimedia
+data in mind and provides all features users might expect, comparable in
+terms of feature-set with libraries like `libzip` in C.
 
 ## Why this library is written
 
@@ -83,15 +82,15 @@ be done in pure Haskell.
 
 This one uses the right approach: leverage good streaming library
 (`conduit`) for memory-efficient processing in pure Haskell. This is however
-is not feature-rich and has certain problems (including programming style),
-some of them are reported on its issue tracker. It also does not appear to
-be maintained (last sign of activity was on December 23, 2014).
+is not feature-rich and has certain problems (including programming style,
+it uses `error` if an entry is missing in archive, among other things), some
+of them are reported on its issue tracker. It also does not appear to be
+maintained (last sign of activity was on December 23, 2014).
 
 ## Features
 
-The library supports all features specified in modern Zip
-specifications. The only feature that is not currently supported is
-encryption, see more about this below.
+The library supports all features specified in modern .ZIP specification
+except for encryption and multi-disk archives. See more about this below.
 
 For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
 
@@ -103,12 +102,19 @@ For reference, here is a [copy of the specification](https://pkware.cachefly.net
 * [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)
 * [Bzip2](https://en.wikipedia.org/wiki/Bzip2)
 
+The best way to add new compression method to the library is to write
+conduit that will do the compression and publish it as a library. `zip` can
+then depend on it and add it to the list of supported compression
+methods. Current list of compression methods reflects what is available on
+Hackage at the moment.
+
 ### Encryption
 
 Encryption is currently not supported. Encryption system described in Zip
 specification is known to be seriously flawed, so it's probably not the best
 way to protect your data anyway. The encryption method seems to be
-proprietary technology of PKWARE, so to hell with it.
+proprietary technology of PKWARE (at least that's what stated about them in
+the .ZIP specification), so to hell with it.
 
 ### Sources of file data
 
@@ -121,7 +127,10 @@ how to get extracted data. The following methods are supported:
 
 * *Conduit source or sink.*
 
-* *ByteString.* Use it only with small files.
+* *ByteString.* Use it only with small data.
+
+* *Copy file from another archive.* Efficient operation, file is copied “as
+  is” — no re-compression is performed.
 
 ### ZIP64
 
@@ -134,10 +143,10 @@ necessary when anything from this list takes place:
 
 * There are more than 65535 entries in the archive.
 
-* Size of file contents is not known in advance (for example when `conduit`
-  is used as file source).
+### Filenames
 
-### Unicode in filenames
+The library uses API that makes it impossible to create archive with
+non-portable or invalid file names in it.
 
 As of .ZIP specification 6.3.2, files with Unicode symbols in their names
 can be put into Zip archives. The library supports mechanisms for this and
@@ -149,11 +158,6 @@ The library allows to attach comments to entire archive or individual files,
 and also gives its user full control over extra fields that are written to
 file headers, so the user can store arbitrary information about file in the
 archive.
-
-### File names
-
-The library uses API that makes it impossible to create archive with
-non-portable or invalid file names in it.
 
 ## Quick start
 
