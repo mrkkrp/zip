@@ -13,7 +13,6 @@ module Codec.Archive.Zip.Internal
   ( PendingAction (..)
   , targetEntry
   , scanArchive
-  , getEntry
   , sourceEntry
   , withOptimizedActions
   , commit
@@ -138,17 +137,8 @@ scanArchive path = withFile (toFilePath path) ReadMode $ \h ->
       throwM (ParsingFailed path "Cannot locate end of central directory")
 
 -- | Given location of archive and information about specific archive entry
--- 'EntryDescription', return its contents as strict 'ByteString'. Returned
--- binary data is decompressed.
-
-getEntry
-  :: Path Abs File     -- ^ Path to archive that contains the entry
-  -> EntryDescription  -- ^ Information needed to extract entry of interest
-  -> IO ByteString     -- ^ Decompressed binary data
-getEntry path desc = sourceEntry path desc (CL.foldMap id)
-
--- | The same as 'getEntry', but archive contents are not returned directly,
--- but instead are streamed to given 'Sink'.
+-- 'EntryDescription', stream its contents to given 'Sink'. Returned
+-- data is uncompressed.
 
 sourceEntry
   :: Path Abs File     -- ^ Path to archive that contains the entry

@@ -107,6 +107,7 @@ import Path
 import Path.IO
 import qualified Codec.Archive.Zip.Internal as I
 import qualified Data.Conduit.Binary        as CB
+import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as M
 import qualified Data.Sequence              as S
 import qualified Data.Set                   as E
@@ -224,12 +225,7 @@ getEntry
      -- ^ Selector that identifies archive entry
   -> ZipArchive ByteString
      -- ^ Contents of the entry (if found)
-getEntry s = do
-  path  <- getFilePath
-  mdesc <- M.lookup s <$> getEntries
-  case mdesc of
-    Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> liftIO' (I.getEntry path desc)
+getEntry s = sourceEntry s (CL.foldMap id)
 
 -- | Stream contents of archive entry to specified 'Sink'.
 --
