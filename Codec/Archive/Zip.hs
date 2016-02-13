@@ -64,6 +64,7 @@ module Codec.Archive.Zip
   , saveEntry
   , unpackInto
   , getArchiveComment
+  , getArchiveDescription
     -- * Modifying archive
     -- ** Adding entries
   , addEntry
@@ -277,6 +278,11 @@ unpackInto dir' = do
 getArchiveComment :: ZipArchive (Maybe Text)
 getArchiveComment = adComment <$> getArchiveDescription
 
+-- | Get archive description record.
+
+getArchiveDescription :: ZipArchive ArchiveDescription
+getArchiveDescription = ZipArchive (gets zsArchive)
+
 ----------------------------------------------------------------------------
 -- Modifying archive
 
@@ -453,11 +459,6 @@ commit = do
 
 getFilePath :: ZipArchive (Path Abs File)
 getFilePath = ZipArchive (gets zsFilePath)
-
--- | Get archive description record.
-
-getArchiveDescription :: ZipArchive ArchiveDescription
-getArchiveDescription = ZipArchive (gets zsArchive)
 
 -- | Get collection of pending actions.
 
