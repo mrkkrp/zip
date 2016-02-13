@@ -441,16 +441,17 @@ commit = do
   file    <- getFilePath
   odesc   <- getArchiveDescription
   actions <- getPending
-  liftIO' (I.withOptimizedActions file odesc actions I.commit)
-  -- NOTE The most robust way to update internal description of the archive
-  -- is to scan it again — manual manipulations with descriptions of entries
-  -- are too error-prone. We also want to erase all pending actions because
-  -- 'I.commit' executes them all by definition.
-  (ndesc, entries) <- liftIO' (I.scanArchive file)
-  ZipArchive . modify $ \st -> st
-    { zsEntries = entries
-    , zsArchive = ndesc
-    , zsActions = S.empty }
+  unless (S.null actions) $ do
+    liftIO' (I.withOptimizedActions file odesc actions I.commit)
+    -- NOTE The most robust way to update internal description of the
+    -- archive is to scan it again — manual manipulations with descriptions
+    -- of entries are too error-prone. We also want to erase all pending
+    -- actions because 'I.commit' executes them all by definition.
+    (ndesc, entries) <- liftIO' (I.scanArchive file)
+    ZipArchive . modify $ \st -> st
+      { zsEntries = entries
+      , zsArchive = ndesc
+      , zsActions = S.empty }
 
 ----------------------------------------------------------------------------
 -- Helpers
