@@ -65,7 +65,7 @@ data PendingAction
     -- ^ Delete comment of particular entry
   | SetModTime UTCTime EntrySelector
     -- ^ Set modification time of particular entry
-  | AddExtraField ExtraField EntrySelector
+  | AddExtraField Natural ByteString EntrySelector
     -- ^ Add an extra field to specified entry
   | DeleteExtraField Natural EntrySelector
     -- ^ Delete an extra filed of specified entry
@@ -87,7 +87,7 @@ targetEntry (Recompress       _ s) = Just s
 targetEntry (SetEntryComment  _ s) = Just s
 targetEntry (DeleteEntryComment s) = Just s
 targetEntry (SetModTime       _ s) = Just s
-targetEntry (AddExtraField    _ s) = Just s
+targetEntry (AddExtraField  _ _ s) = Just s
 targetEntry (DeleteExtraField _ s) = Just s
 targetEntry (SetArchiveComment  _) = Nothing
 targetEntry DeleteArchiveComment   = Nothing
