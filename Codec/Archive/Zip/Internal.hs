@@ -143,7 +143,7 @@ scanArchive path = withFile (toFilePath path) ReadMode $ \h ->
 sourceEntry
   :: Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
-  -> Sink ByteString (ResourceT IO) a -- ^ Where to stream decompressed data
+  -> Sink ByteString (ResourceT IO) a -- ^ Where to stream uncompressed data
   -> IO a
 sourceEntry path ed@EntryDescription {..} sink = runResourceT $
   source $= CB.isolate (fromIntegral edCompressedSize) $= decompress $$ sink
@@ -170,7 +170,7 @@ withOptimizedActions
      -- ^ Given name of file where to write archive and optimized actions,
      -- do it
   -> IO ()
-withOptimizedActions = undefined
+withOptimizedActions = undefined -- TODO
 
 -- | Undertake /all/ actions specified in the second argument of the
 -- function.
@@ -179,7 +179,7 @@ commit
   :: Path Abs File     -- ^ Where to write the new archive
   -> Seq PendingAction -- ^ Collection of actions (should be optimized)
   -> IO ()
-commit = undefined
+commit = undefined -- TODO
 
 ----------------------------------------------------------------------------
 -- Binary serialization

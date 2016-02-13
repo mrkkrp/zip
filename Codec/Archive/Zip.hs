@@ -26,7 +26,7 @@
 -- archive instantly, because doing so on every manipulation would often be
 -- inefficient. Instead we maintain collection of pending actions that can
 -- be turned into optimized procedure that efficiently modifies archive in
--- one pass. Normally this should be of no concern for you, because all
+-- one pass. Normally this should be of no concern to you, because all
 -- actions are performed automatically when you leave the realm of
 -- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
 -- function is your friend. There are even “undo” functions, by the way.
@@ -355,8 +355,8 @@ deleteEntry s = addPending (I.DeleteEntry s)
 -- | Change compression method of an entry.
 
 recompress
-  :: CompressionMethod
-  -> EntrySelector
+  :: CompressionMethod -- ^ New compression method
+  -> EntrySelector     -- ^ Name of entry to re-compress
   -> ZipArchive ()
 recompress t s = addPending (I.Recompress t s)
 
