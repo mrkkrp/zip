@@ -129,7 +129,7 @@ scanArchive
   :: Path Abs File     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
 scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
-  mecdOffset <- locateECD h
+  mecdOffset <- locateECD path h
   case mecdOffset of
     Just ecdOffset -> do
       hSeek h AbsoluteSeek ecdOffset
@@ -333,8 +333,63 @@ getSignature sig = do
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
 
-locateECD :: Handle -> IO (Maybe Integer)
-locateECD = fmap (Just . subtract 22) . hFileSize -- FIXME
+locateECD :: Path Abs File -> Handle -> IO (Maybe Integer)
+locateECD path h = sizeCheck
+  where
+
+    sizeCheck = do
+      tooSmall <- (< 22) <$> hFileSize h
+      if tooSmall
+        then return Nothing
+        else hSeek h SeekFromEnd (-22) >> loop
+
+    loop = do
+      sig <- getNum getWord32le 4
+      pos <- subtract 4 <$> hTell h
+      let again = hSeek h AbsoluteSeek (pos - 1) >> loop
+          done  = pos == 0
+      if sig == 0x06054b50
+        then do
+          result <- checkComment pos >>+ checkCDSig >>+ checkZip64
+          case result of
+            Nothing -> bool again (return Nothing) done
+            Just ecd -> return (Just ecd)
+        else bool again (return Nothing) done
+
+    checkComment pos = do
+      size <- hFileSize h
+      hSeek h AbsoluteSeek (pos + 20)
+      l <- fromIntegral <$> getNum getWord16le 2
+      return $ if l + 22 == size - pos
+        then Just pos
+        else Nothing
+
+    checkCDSig pos = do
+      hSeek h AbsoluteSeek (pos + 16)
+      sigPos <- fromIntegral <$> getNum getWord32le 4
+      hSeek h AbsoluteSeek sigPos
+      cdSig  <- getNum getWord32le 4
+      return $ if cdSig == 0x02014b50 || cdSig == 0x06054b50
+        then Just pos
+        else Nothing
+
+    checkZip64 pos =
+      if pos < 20
+        then return (Just pos)
+        else do
+          hSeek h AbsoluteSeek (pos - 20)
+          zip64locatorSig <- getNum getWord32le 4
+          if zip64locatorSig == 0x07064b50
+            then do
+              hSeek h AbsoluteSeek (pos - 12)
+              Just . fromIntegral <$> getNum getWord64le 8
+            else return (Just pos)
+
+    getNum f n = do
+      result <- runGet f <$> B.hGet h n
+      case result of
+        Left msg -> throwM (ParsingFailed path msg)
+        Right val -> return val
 
 ----------------------------------------------------------------------------
 -- Helpers
@@ -428,3 +483,10 @@ fromMsDosTime MsDosTime {..} = UTCTime
     day     = fromIntegral (msDosDate .&. 0x1F)
     month   = fromIntegral $ shiftR msDosDate 5 .&. 0xF
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
+
+-- | Chains 'Maybe' monad inside 'IO' monad.
+
+infixl 1 >>+
+
+(>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
+a >>+ b = a >>= maybe (return Nothing) b
