@@ -14,9 +14,7 @@ module Codec.Archive.Zip.Internal
   , targetEntry
   , scanArchive
   , sourceEntry
-  , withOptimizedActions
-  , commit
-  )
+  , commit )
 where
 
 import Codec.Archive.Zip.Type
@@ -28,11 +26,13 @@ import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Source, Sink, ($=), ($$))
-import Data.Map.Strict (Map)
+import Data.Conduit (Source, Sink, ($=), ($$), awaitForever, yield)
+import Data.Map.Strict (Map, (!))
 import Data.Maybe (fromJust, catMaybes)
-import Data.Sequence (Seq)
+import Data.Monoid ((<>))
+import Data.Sequence (Seq, (><))
 import Data.Serialize
+import Data.Set (Set)
 import Data.Text (Text)
 import Data.Time
 import Data.Version
@@ -40,12 +40,14 @@ import Data.Word (Word16, Word32)
 import Numeric.Natural (Natural)
 import Path
 import System.IO
+import System.PlanB
 import qualified Data.ByteString     as B
 import qualified Data.Conduit.BZlib  as BZ
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List   as CL
 import qualified Data.Conduit.Zlib   as Z
 import qualified Data.Map.Strict     as M
+import qualified Data.Set            as E
 import qualified Data.Text           as T
 import qualified Data.Text.Encoding  as T
 
@@ -53,13 +55,9 @@ import qualified Data.Text.Encoding  as T
 -- archive.
 
 data PendingAction
-  = AddEntry CompressionMethod ByteString EntrySelector
-    -- ^ Add entry given its binary content as strict 'ByteString'
-  | SinkEntry CompressionMethod (Source (ResourceT IO) ByteString) EntrySelector
+  = SinkEntry CompressionMethod (Source (ResourceT IO) ByteString) EntrySelector
     -- ^ Add entry given its 'Source'
-  | LoadEntry CompressionMethod (Path Abs File) EntrySelector
-    -- ^ Load entry from file on disk
-  | CopyEntry (Path Abs File) EntrySelector
+  | CopyEntry (Path Abs File) EntrySelector EntrySelector
     -- ^ Copy an entry form another archive without re-compression
   | RenameEntry EntrySelector EntrySelector
     -- ^ Change name the entry inside archive
@@ -82,13 +80,27 @@ data PendingAction
   | DeleteArchiveComment
     -- ^ Delete comment of entire archive
 
+-- | Collection of maps describing how to produce entries in resulting
+-- archive.
+
+data ProducingActions = ProducingActions
+  { paCopyEntry :: Map (Path Abs File) (Map EntrySelector EntrySelector)
+  , paSinkEntry :: Map EntrySelector (Source (ResourceT IO) ByteString) }
+
+-- | Collection of editing actions, that is, actions that modify already
+-- existing entries.
+
+data EditingActions = EditingActions
+  { eaCompression  :: Map EntrySelector CompressionMethod
+  , eaEntryComment :: Map EntrySelector Text
+  , eaModTime      :: Map EntrySelector UTCTime
+  , eaExtraField   :: Map EntrySelector (Map Natural ByteString) }
+
 -- | Determine target entry of action.
 
 targetEntry :: PendingAction -> Maybe EntrySelector
-targetEntry (AddEntry       _ _ s) = Just s
 targetEntry (SinkEntry      _ _ s) = Just s
-targetEntry (LoadEntry      _ _ s) = Just s
-targetEntry (CopyEntry        _ s) = Just s
+targetEntry (CopyEntry      _ _ s) = Just s
 targetEntry (RenameEntry      s _) = Just s
 targetEntry (DeleteEntry        s) = Just s
 targetEntry (Recompress       _ s) = Just s
@@ -168,32 +180,99 @@ sourceEntry path EntryDescription {..} sink = runResourceT $
           hSeek h RelativeSeek gap
           return h
     decompress = case edCompression of
-      Store   -> CL.map id
+      Store   -> awaitForever yield
       Deflate -> Z.decompress $ Z.WindowBits (-15)
       BZip2   -> BZ.bunzip2
 
--- | Transform given pending actions so they can be performed efficiently in
--- one pass. The action also prepares environment when necessary
--- (e.g. creates temporary files).
-
-withOptimizedActions
-  :: Path Abs File     -- ^ Location of archive file to edit or create
-  -> ArchiveDescription -- ^ Archive description
-  -> Seq PendingAction -- ^ Collection of pending actions
-  -> (Path Abs File -> Seq PendingAction -> IO ())
-     -- ^ Given name of file where to write archive and optimized actions,
-     -- do it
-  -> IO ()
-withOptimizedActions = undefined -- TODO
-
--- | Undertake /all/ actions specified in the second argument of the
--- function.
+-- | Undertake /all/ actions specified as the fourth argument of the
+-- function. This transforms given pending actions so they can be performed
+-- in one pass, and then they are performed in the most efficient way.
 
 commit
-  :: Path Abs File     -- ^ Where to write the new archive
-  -> Seq PendingAction -- ^ Collection of actions (should be optimized)
+  :: Path Abs File     -- ^ Location of archive file to edit or create
+  -> ArchiveDescription -- ^ Archive description
+  -> Map EntrySelector EntryDescription -- ^ Current list of entires
+  -> Seq PendingAction -- ^ Collection of pending actions
   -> IO ()
-commit = undefined -- TODO
+commit path desc entries xs =
+  withNewFile (overrideIfExists <> nameTemplate "zip") path $ \temp -> do
+    let (ProducingActions coping sinking, editing) =
+          optimize (toRecreatingActions path entries >< xs)
+        comment = undefined -- TODO get comment in maybe
+        dirs = undefined -- TODO create list of all needed dirs
+    withFile (toFilePath path) WriteMode $ \h -> do
+      dirsCD   <- writeDirs h dirs
+      copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
+        copyEntries h srcPath (coping ! srcPath) editing)
+      sunkCD   <- M.fromList <$> forM (M.keys sinking) (\selector ->
+        sinkEntry h selector (sinking ! selector) editing)
+      writeCD h comment dirsCD (M.union copiedCD sunkCD)
+
+-- | Transform map representing existing entries into collection of actions
+-- that re-create those entires.
+
+toRecreatingActions
+  :: Path Abs File     -- ^ Name of archive file where entires are found
+  -> Map EntrySelector EntryDescription -- ^ Actual list of entires
+  -> Seq PendingAction -- ^ Actions that recreate the archive entries
+toRecreatingActions = undefined
+
+-- | Transform collection of 'PendingAction's into 'OptimizedActions' —
+-- collection of data describing how to create resulting archive.
+
+optimize
+  :: Seq PendingAction -- ^ Collection of pending actions
+  -> (ProducingActions, EditingActions) -- ^ Optimized data
+optimize = undefined
+
+-- | Write local file headers representing directories in the
+-- archive. Return information that is necessary to write central directory
+-- headers later.
+
+writeDirs
+  :: Handle            -- ^ Opened 'Handle' of zip archive file
+  -> Set EntrySelector -- ^ 'Set' of 'EntrySelector's
+  -> IO (Set EntrySelector)
+     -- ^ Info to generate central directory file headers later
+writeDirs = undefined -- TODO
+
+-- | Copy entries from another archive and write them into file associated
+-- with given handle.
+
+copyEntries
+  :: Handle            -- ^ Opened 'Handle' of zip archive file
+  -> Path Abs File     -- ^ Path to file from which to copy the entries
+  -> Map EntrySelector EntrySelector
+     -- ^ 'Map' from original name to name to use in new archive
+  -> EditingActions    -- ^ Additional info that can influence result
+  -> IO (Map EntrySelector EntryDescription)
+     -- ^ Info to generate central directory file headers later
+copyEntries = undefined -- TODO
+
+-- | Sink entry from given stream into file associtated with given 'Handle'.
+
+sinkEntry
+  :: Handle            -- ^ Opened 'Handle' of zip archive file
+  -> EntrySelector     -- ^ Name of entry to add
+  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
+  -> EditingActions    -- ^ Additional info that can influence result
+  -> IO (EntrySelector, EntryDescription)
+     -- ^ Info to generate central directory file headers later
+sinkEntry = undefined -- TODO
+
+-- | Append central directory entries and end of central directory record to
+-- file that given 'Handle' is associated with. Note that this automatically
+-- writes Zip64 end of central directory record and Zip64 end of central
+-- directory locator when necessary.
+
+writeCD
+  :: Handle            -- ^ Opened handle of zip archive file
+  -> Maybe Text        -- ^ Commentary to entire archive
+  -> Set EntrySelector -- ^ Collection of directories to write
+  -> Map EntrySelector EntryDescription
+  -- ^ Info about already written local headers and entry data
+  -> IO ()
+writeCD = undefined -- TODO
 
 ----------------------------------------------------------------------------
 -- Binary serialization

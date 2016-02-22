@@ -97,7 +97,7 @@ import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Resource (ResourceT)
 import Data.ByteString (ByteString)
-import Data.Conduit (Source, Sink)
+import Data.Conduit (Source, Sink, yield)
 import Data.Map.Strict (Map)
 import Data.Sequence (Seq, (<|))
 import Data.Text (Text)
@@ -214,9 +214,9 @@ withArchive path m = do
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
 
--- | Get contents of specific archive entry as a lazy 'BL.ByteString'. It's
--- not recommended to use this on big entries, because it will suck out a
--- lot of memory. For big entries, use conduits: 'sourceEntry'.
+-- | Get contents of specific archive entry as strict 'ByteString'. It's not
+-- recommended to use this on big entries, because it will suck out a lot of
+-- memory. For big entries, use conduits: 'sourceEntry'.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -245,7 +245,7 @@ sourceEntry s sink = do
     Nothing   -> throwM (EntryDoesNotExist path s)
     Just desc -> liftIO' (I.sourceEntry path desc sink)
 
--- | Save specific archive entry as a file in file system.
+-- | Save specific archive entry as a file in the file system.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -289,7 +289,7 @@ addEntry
   -> ByteString        -- ^ Entry contents
   -> EntrySelector     -- ^ Name of entry to add
   -> ZipArchive ()
-addEntry t b s = addPending (I.AddEntry t b s)
+addEntry t b s = addPending (I.SinkEntry t (yield b) s)
 
 -- | Stream data from the specified source to an archive entry.
 
@@ -310,17 +310,19 @@ loadEntry
 loadEntry t f path = do
   apath <- liftIO' (canonicalizePath path)
   s     <- f apath
-  addPending (I.LoadEntry t apath s)
+  let src = CB.sourceFile (toFilePath apath)
+  addPending (I.SinkEntry t src s)
 
 -- | Copy entry “as is” from another .ZIP archive.
 
 copyEntry
   :: Path b File       -- ^ Path to archive to copy from
-  -> EntrySelector     -- ^ Name of entry to copy
+  -> EntrySelector     -- ^ Name of entry (in source archive) to copy
+  -> EntrySelector     -- ^ Name of entry to insert (in actual archive)
   -> ZipArchive ()
-copyEntry path s = do
+copyEntry path s' s = do
   apath <- liftIO' (canonicalizePath path)
-  addPending (I.CopyEntry apath s)
+  addPending (I.CopyEntry apath s' s)
 
 -- | Add entire directory to archive. Please note that due to design of the
 -- library, empty directories won't be added to archive.
@@ -335,9 +337,7 @@ packDirRecur
   -> ZipArchive ()
 packDirRecur t f path = do
   files <- snd <$> liftIO' (listDirRecur path)
-  forM_ files $ \file -> do
-    s   <- f file
-    addPending (I.LoadEntry t file s)
+  mapM_ (loadEntry t f) files
 
 -- | Rename entry in archive.
 
@@ -434,18 +434,19 @@ undoAll = modifyActions (const S.empty)
 
 commit :: ZipArchive ()
 commit = do
-  file    <- getFilePath
-  odesc   <- getArchiveDescription
-  actions <- getPending
+  file     <- getFilePath
+  odesc    <- getArchiveDescription
+  oentries <- getEntries
+  actions  <- getPending
   unless (S.null actions) $ do
-    liftIO' (I.withOptimizedActions file odesc actions I.commit)
+    liftIO' (I.commit file odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
     -- archive is to scan it again — manual manipulations with descriptions
     -- of entries are too error-prone. We also want to erase all pending
     -- actions because 'I.commit' executes them all by definition.
-    (ndesc, entries) <- liftIO' (I.scanArchive file)
+    (ndesc, nentries) <- liftIO' (I.scanArchive file)
     ZipArchive . modify $ \st -> st
-      { zsEntries = entries
+      { zsEntries = nentries
       , zsArchive = ndesc
       , zsActions = S.empty }
 
