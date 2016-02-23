@@ -9,6 +9,8 @@
 --
 -- Low-level, non-public concepts and operations.
 
+{-# LANGUAGE BangPatterns #-}
+
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
   , targetEntry
@@ -27,10 +29,11 @@ import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
 import Data.Conduit (Source, Sink, ($=), ($$), awaitForever, yield)
+import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
-import Data.Maybe (fromJust, catMaybes)
+import Data.Maybe (fromJust, catMaybes, isNothing)
 import Data.Monoid ((<>))
-import Data.Sequence (Seq, (><))
+import Data.Sequence (Seq, (><), (|>))
 import Data.Serialize
 import Data.Set (Set)
 import Data.Text (Text)
@@ -47,9 +50,11 @@ import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List   as CL
 import qualified Data.Conduit.Zlib   as Z
 import qualified Data.Map.Strict     as M
+import qualified Data.Sequence       as S
 import qualified Data.Set            as E
 import qualified Data.Text           as T
 import qualified Data.Text.Encoding  as T
+import qualified System.FilePath     as FP
 
 -- | The sum type describes all possible actions that can be performed on
 -- archive.
@@ -194,19 +199,37 @@ commit
   -> Map EntrySelector EntryDescription -- ^ Current list of entires
   -> Seq PendingAction -- ^ Collection of pending actions
   -> IO ()
-commit path desc entries xs =
+commit path ArchiveDescription {..} entries xs =
   withNewFile (overrideIfExists <> nameTemplate "zip") path $ \temp -> do
-    let (ProducingActions coping sinking, editing) =
+    let (ProducingActions !coping !sinking, !editing) =
           optimize (toRecreatingActions path entries >< xs)
-        comment = undefined -- TODO get comment in maybe
-        dirs = undefined -- TODO create list of all needed dirs
-    withFile (toFilePath path) WriteMode $ \h -> do
-      dirsCD   <- writeDirs h dirs
+        comment = predictComment adComment xs
+    withFile (toFilePath temp) WriteMode $ \h -> do
       copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
         copyEntries h srcPath (coping ! srcPath) editing)
       sunkCD   <- M.fromList <$> forM (M.keys sinking) (\selector ->
         sinkEntry h selector (sinking ! selector) editing)
+      let !dirs = predictDirs (M.keysSet copiedCD `E.union` M.keysSet sunkCD)
+      dirsCD   <- writeDirs h dirs
       writeCD h comment dirsCD (M.union copiedCD sunkCD)
+
+-- | Determine what comment in new archive will look like given its original
+-- value and collection of pending actions.
+
+predictComment :: Maybe Text -> Seq PendingAction -> Maybe Text
+predictComment original xs =
+  case S.index xs <$> S.findIndexR (isNothing . targetEntry) xs of
+    Nothing                      -> original
+    Just DeleteArchiveComment    -> Nothing
+    Just (SetArchiveComment txt) -> Just txt
+    Just _                       -> Nothing
+
+-- | Determine set of directories that we need to create for given set of
+-- entries.
+
+predictDirs :: Set EntrySelector -> Set FilePath
+predictDirs = E.delete "." . E.map getParent
+  where getParent = FP.takeDirectory . toFilePath . unEntrySelector
 
 -- | Transform map representing existing entries into collection of actions
 -- that re-create those entires.
@@ -215,7 +238,8 @@ toRecreatingActions
   :: Path Abs File     -- ^ Name of archive file where entires are found
   -> Map EntrySelector EntryDescription -- ^ Actual list of entires
   -> Seq PendingAction -- ^ Actions that recreate the archive entries
-toRecreatingActions = undefined
+toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
+  where f s e = s |> CopyEntry path e e
 
 -- | Transform collection of 'PendingAction's into 'OptimizedActions' —
 -- collection of data describing how to create resulting archive.
@@ -231,7 +255,7 @@ optimize = undefined
 
 writeDirs
   :: Handle            -- ^ Opened 'Handle' of zip archive file
-  -> Set EntrySelector -- ^ 'Set' of 'EntrySelector's
+  -> Set FilePath      -- ^ 'Set' of directories to write
   -> IO (Set EntrySelector)
      -- ^ Info to generate central directory file headers later
 writeDirs = undefined -- TODO
