@@ -28,7 +28,9 @@ import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Source, Sink, ($=), ($$), awaitForever, yield)
+import Data.Conduit (Source, Sink, (=$=), ($$), awaitForever, yield)
+import Data.Conduit.Internal (zipSinks)
+import Data.Digest.CRC32 (crc32Update)
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
 import Data.Maybe (fromJust, catMaybes, isNothing)
@@ -99,7 +101,7 @@ data EditingActions = EditingActions
   { eaCompression  :: Map EntrySelector CompressionMethod
   , eaEntryComment :: Map EntrySelector Text
   , eaModTime      :: Map EntrySelector UTCTime
-  , eaExtraField   :: Map EntrySelector (Map Natural ByteString) }
+  , eaExtraFields  :: Map EntrySelector (Map Natural ByteString) }
 
 -- | Determine target entry of action.
 
@@ -164,16 +166,14 @@ scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
       throwM (ParsingFailed path "Cannot locate end of central directory")
 
 -- | Given location of archive and information about specific archive entry
--- 'EntryDescription', stream its contents to given 'Sink'. Returned
--- data is uncompressed.
+-- 'EntryDescription', return 'Source' of its uncompressed data.
 
 sourceEntry
   :: Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
-  -> Sink ByteString (ResourceT IO) a -- ^ Where to stream uncompressed data
-  -> IO a
-sourceEntry path EntryDescription {..} sink = runResourceT $
-  source $= CB.isolate (fromIntegral edCompressedSize) $= decompress $$ sink
+  -> Source (ResourceT IO) ByteString -- ^ Source of uncompressed data
+sourceEntry path EntryDescription {..} =
+  source =$= CB.isolate (fromIntegral edCompressedSize) =$= decompress
   where
     source = CB.sourceIOHandle $ do
       h <- openFile (toFilePath path) ReadMode
@@ -207,11 +207,10 @@ commit path ArchiveDescription {..} entries xs =
     withFile (toFilePath temp) WriteMode $ \h -> do
       copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
         copyEntries h srcPath (coping ! srcPath) editing)
-      sunkCD   <- M.fromList <$> forM (M.keys sinking) (\selector ->
+      let !sinkingKeys = M.keys $ sinking `M.difference` copiedCD
+      sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
         sinkEntry h selector (sinking ! selector) editing)
-      let !dirs = predictDirs (M.keysSet copiedCD `E.union` M.keysSet sunkCD)
-      dirsCD   <- writeDirs h dirs
-      writeCD h comment dirsCD (M.union copiedCD sunkCD)
+      writeCD h comment (copiedCD `M.union` sunkCD)
 
 -- | Determine what comment in new archive will look like given its original
 -- value and collection of pending actions.
@@ -223,13 +222,6 @@ predictComment original xs =
     Just DeleteArchiveComment    -> Nothing
     Just (SetArchiveComment txt) -> Just txt
     Just _                       -> Nothing
-
--- | Determine set of directories that we need to create for given set of
--- entries.
-
-predictDirs :: Set EntrySelector -> Set FilePath
-predictDirs = E.delete "." . E.map getParent
-  where getParent = FP.takeDirectory . toFilePath . unEntrySelector
 
 -- | Transform map representing existing entries into collection of actions
 -- that re-create those entires.
@@ -247,18 +239,44 @@ toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
 optimize
   :: Seq PendingAction -- ^ Collection of pending actions
   -> (ProducingActions, EditingActions) -- ^ Optimized data
-optimize = undefined
-
--- | Write local file headers representing directories in the
--- archive. Return information that is necessary to write central directory
--- headers later.
-
-writeDirs
-  :: Handle            -- ^ Opened 'Handle' of zip archive file
-  -> Set FilePath      -- ^ 'Set' of directories to write
-  -> IO (Set EntrySelector)
-     -- ^ Info to generate central directory file headers later
-writeDirs = undefined -- TODO
+optimize = foldl' f
+  ( ProducingActions M.empty M.empty
+  , EditingActions   M.empty M.empty M.empty M.empty )
+  where
+    f (pa, ea) a = case a of
+      SinkEntry m src s ->
+        ( pa { paSinkEntry   = M.insert s src (paSinkEntry pa) }
+        , ea { eaCompression = M.insert s m (eaCompression ea) } )
+      CopyEntry path os ns ->
+        ( pa { paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa)}
+        , ea )
+      RenameEntry os ns ->
+        ( pa { paCopyEntry = M.map (M.map $ re os ns) (paCopyEntry pa)
+             , paSinkEntry = renameKey os ns (paSinkEntry pa) }
+        , ea )
+      DeleteEntry s ->
+        ( pa { paSinkEntry = M.delete s (paSinkEntry pa)
+             , paCopyEntry = M.map (M.delete s) (paCopyEntry pa) }
+        , ea )
+      Recompress m s ->
+        (pa, ea { eaCompression = M.insert s m (eaCompression ea) })
+      SetEntryComment txt s ->
+        (pa, ea { eaEntryComment = M.insert s txt (eaEntryComment ea) })
+      DeleteEntryComment s ->
+        (pa, ea { eaEntryComment = M.delete s (eaEntryComment ea) })
+      SetModTime time s ->
+        (pa, ea { eaModTime = M.insert s time (eaModTime ea) })
+      AddExtraField n b s ->
+        (pa, ea { eaExtraFields = M.alter (ef n b) s (eaExtraFields ea) })
+      DeleteExtraField n s ->
+        (pa, ea { eaExtraFields = M.alter (er n) s (eaExtraFields ea) })
+      _ -> (pa, ea)
+    re o n x = if x == o then n else x
+    ef k v (Just m) = Just (M.insert k v m)
+    ef k v Nothing  = Just (M.singleton k v)
+    er k (Just m)   = let n = M.delete k m in
+      if M.null n then Nothing else Just n
+    er _ Nothing    = Nothing
 
 -- | Copy entries from another archive and write them into file associated
 -- with given handle.
@@ -271,9 +289,16 @@ copyEntries
   -> EditingActions    -- ^ Additional info that can influence result
   -> IO (Map EntrySelector EntryDescription)
      -- ^ Info to generate central directory file headers later
-copyEntries = undefined -- TODO
+copyEntries h path m e = do
+  entries <- snd <$> scanArchive path
+  done    <- forM (M.keys m) $ \s -> do
+    unless (s `M.member` entries) $
+      throwM (EntryDoesNotExist path s)
+    let src = sourceEntry path (entries ! s)
+    sinkEntry h (m ! s) src e
+  return (M.fromList done)
 
--- | Sink entry from given stream into file associtated with given 'Handle'.
+-- | Sink entry from given stream into file associated with given 'Handle'.
 
 sinkEntry
   :: Handle            -- ^ Opened 'Handle' of zip archive file
@@ -282,7 +307,56 @@ sinkEntry
   -> EditingActions    -- ^ Additional info that can influence result
   -> IO (EntrySelector, EntryDescription)
      -- ^ Info to generate central directory file headers later
-sinkEntry = undefined -- TODO
+sinkEntry h s src EditingActions {..} = do
+  modTime <- getCurrentTime
+  offset  <- hTell h
+  let compression = M.findWithDefault Store s eaCompression
+      desc = EntryDescription -- to write in local header
+        { edVersionMadeBy    = Version [4,6] []
+        , edVersionNeeded    = Version [4,6] []
+        , edCompression      = compression
+        , edModified         = M.findWithDefault modTime s eaModTime
+        , edCRC32            = 0 -- real value is in data descriptor
+        , edCompressedSize   = 0 -- ↑
+        , edUncompressedSize = 0 -- ↑
+        , edOffset           = fromIntegral offset
+        , edComment          = M.lookup s eaEntryComment
+        , edExtraField       = M.findWithDefault M.empty s eaExtraFields }
+  B.hPut h (runPut (putLocalHeader s desc))
+  DataDescriptor {..} <- runResourceT (src $$ sinkData h compression)
+  -- TODO We must finally decide how to write sizes (compressed and
+  -- uncompressed) and CRC-32 and how to do it when Zip64 is necessary
+  return (s, desc { edCRC32            = ddCRC32
+                  , edCompressedSize   = ddCompressedSize
+                  , edUncompressedSize = ddUncompressedSize
+                  })
+
+-- | Create 'Sink' to stream data there. Once streaming is finished, return
+-- 'DataDescriptor' for the streamed data. The action /does not/ close given
+-- 'Handle'.
+
+sinkData
+  :: Handle            -- ^ Opened 'Handle' of zip archive file
+  -> CompressionMethod -- ^ Compression method to apply
+  -> Sink ByteString (ResourceT IO) DataDescriptor
+     -- ^ 'Sink' where to stream data
+sinkData h compression = do
+  let crc32Sink = CL.fold crc32Update 0
+      sizeSink  = CL.fold (\acc input -> B.length input + acc) 0
+      dataSink  = fst <$> zipSinks sizeSink (CB.sinkHandle h)
+      withCompression = zipSinks (zipSinks sizeSink crc32Sink)
+  ((uncompressedSize, crc32), compressedSize) <-
+    case compression of
+      Store   -> withCompression
+        dataSink
+      Deflate -> withCompression $
+        Z.compress 9 (Z.WindowBits (-15)) =$= dataSink
+      BZip2   -> withCompression $
+        BZ.bzip2 =$= dataSink
+  return DataDescriptor
+    { ddCRC32            = fromIntegral crc32
+    , ddCompressedSize   = fromIntegral compressedSize
+    , ddUncompressedSize = fromIntegral uncompressedSize }
 
 -- | Append central directory entries and end of central directory record to
 -- file that given 'Handle' is associated with. Note that this automatically
@@ -292,7 +366,6 @@ sinkEntry = undefined -- TODO
 writeCD
   :: Handle            -- ^ Opened handle of zip archive file
   -> Maybe Text        -- ^ Commentary to entire archive
-  -> Set EntrySelector -- ^ Collection of directories to write
   -> Map EntrySelector EntryDescription
   -- ^ Info about already written local headers and entry data
   -> IO ()
@@ -343,13 +416,13 @@ getECD = do
 -- | Parse central directory file headers and put them into 'Map'.
 
 getCD :: Get (Map EntrySelector EntryDescription)
-getCD = M.fromList . catMaybes <$> many getCDEntry
+getCD = M.fromList . catMaybes <$> many getCDHeader
 
 -- | Parse single central directory file header. If it's a directory or file
 -- compressed with unsupported compression method, 'Nothing' is returned.
 
-getCDEntry :: Get (Maybe (EntrySelector, EntryDescription))
-getCDEntry = do
+getCDHeader :: Get (Maybe (EntrySelector, EntryDescription))
+getCDHeader = do
   getSignature 0x02014b50 -- central file header signature
   versionMadeBy  <- toVersion <$> getWord16le -- version made by
   versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
@@ -394,7 +467,7 @@ getCDEntry = do
             , edUncompressedSize = with64opt uncompressed z64efUncompressedSize
             , edOffset           = with64opt offset       z64efOffset
             , edComment = if commentSize == 0 then Nothing else Just comment
-            , edExtraFields      = extraFields }
+            , edExtraField       = extraFields }
       in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
 
 -- | Parse an extra-field.
@@ -432,6 +505,60 @@ getSignature sig = do
   x <- getWord32le -- grab 4-byte signature
   unless (x == sig) . fail $
     "Expected signature " ++ show sig ++ ", but got: " ++ show x
+
+-- | Create 'ByteString' representing local file header.
+
+putLocalHeader :: EntrySelector -> EntryDescription -> Put
+putLocalHeader s EntryDescription {..} = do
+  putWord32le 0x04034b50 -- local file header signature
+  putWord16le (fromVersion edVersionNeeded) -- version needed to extract
+  let entryName = getEntryName s
+      rawName   = T.encodeUtf8 entryName
+      unicode   = needsUnicode entryName
+        || maybe False needsUnicode edComment
+      modTime   = toMsDosTime edModified
+  putWord16le (if unicode then 0x0004 else 0x0808)
+  -- ↑ general purpose bit-flag
+  putWord16le (fromCompressionMethod edCompression) -- compression method
+  putWord16le (msDosTime modTime) -- last mod file time
+  putWord16le (msDosDate modTime) -- last mod file date
+  putWord32le (fromIntegral edCRC32) -- CRC-32 checksum
+  putWord32le (fromIntegral edCompressedSize) -- compressed size
+  putWord32le (fromIntegral edUncompressedSize) -- uncompressed size
+  putWord16le (fromIntegral $ B.length rawName) -- file name length
+  putWord16le (fromIntegral $ predictExtraFieldLength edExtraField)
+  -- ↑ extra field length
+  putByteString rawName -- file name (variable size)
+  forM_ (M.keys edExtraField) $ \n ->
+    putExtraField n (edExtraField ! n)
+  -- ↑ extra field (variable size)
+
+-- | Create 'ByteString' representing an extra field.
+
+putExtraField :: Natural -> ByteString -> Put
+putExtraField headerId b = do
+  putWord16le (fromIntegral headerId)
+  putWord16le (fromIntegral $ B.length b)
+  putByteString b
+
+-- | Create 'ByteString' representing entire central directory.
+
+putCD :: Map EntrySelector EntryDescription -> Put
+putCD m = forM_ (M.keys m) $ \s ->
+  putCDHeader s (m ! s)
+
+-- | Create 'ByteString' representing central directory file header.
+
+putCDHeader :: EntrySelector -> EntryDescription -> Put
+putCDHeader = undefined -- TODO
+
+-- | Create 'ByteString' representing Zip64 end of central directory record.
+
+putZip64ECD :: Put -- FIXME
+putZip64ECD = undefined -- TODO
+
+-- TODO Zip64 end of central directory locator
+-- TODO end of central directory signature
 
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
@@ -526,6 +653,14 @@ toCompressionMethod 8  = Just Deflate
 toCompressionMethod 12 = Just BZip2
 toCompressionMethod _  = Nothing
 
+-- | Covert 'CompressionMethod' to its numeric representation as per .ZIP
+-- specification.
+
+fromCompressionMethod :: CompressionMethod -> Word16
+fromCompressionMethod Store   = 0
+fromCompressionMethod Deflate = 8
+fromCompressionMethod BZip2   = 12
+
 -- | A temporary data structure to hold Zip64 extra data field information.
 
 data Zip64ExtraField = Zip64ExtraField
@@ -541,6 +676,20 @@ parseZip64ExtraFiled b = either (const Nothing) Just . flip runGet b $ do
   compressed   <- fromIntegral <$> getWord64le -- compressed size
   offset       <- fromIntegral <$> getWord64le -- offset of local file header
   return (Zip64ExtraField uncompressed compressed offset)
+
+-- | Return number of bytes that given collection of extra fields will
+-- occupy.
+
+predictExtraFieldLength :: Map Natural ByteString -> Int
+predictExtraFieldLength = M.foldl' f 0
+  where f t b = 4 + B.length b + t
+
+-- | Data descriptor representation.
+
+data DataDescriptor = DataDescriptor
+  { ddCRC32 :: Natural
+  , ddCompressedSize :: Natural
+  , ddUncompressedSize :: Natural }
 
 -- | MS-DOS date-time: a pair of Word16s (date, time) with the following
 -- structure:
@@ -579,12 +728,12 @@ fromMsDosTime MsDosTime {..} = UTCTime
   (fromGregorian year month day)
   (secondsToDiffTime $ hours * 60 * 60 + minutes * 60 + seconds)
   where
-    seconds = fromIntegral $ 2 * (msDosTime .&. 0x1F)
-    minutes = fromIntegral $ shiftR msDosTime 5 .&. 0x3F
+    seconds = fromIntegral $ 2 * (msDosTime .&. 0x1f)
+    minutes = fromIntegral $ shiftR msDosTime 5 .&. 0x3f
     hours   = fromIntegral (shiftR msDosTime 11)
 
-    day     = fromIntegral (msDosDate .&. 0x1F)
-    month   = fromIntegral $ shiftR msDosDate 5 .&. 0xF
+    day     = fromIntegral (msDosDate .&. 0x1f)
+    month   = fromIntegral $ shiftR msDosDate 5 .&. 0xf
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
 
 -- | Chains 'Maybe' monad inside 'IO' monad.
@@ -593,3 +742,10 @@ infixl 1 >>+
 
 (>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
 a >>+ b = a >>= maybe (return Nothing) b
+
+-- | Rename entry (key) in a 'Map'.
+
+renameKey :: Ord k => k -> k -> Map k a -> Map k a
+renameKey ok nk m = case M.lookup ok m of
+  Nothing -> m
+  Just e -> M.insert nk e (M.delete ok m)

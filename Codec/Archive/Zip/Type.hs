@@ -150,7 +150,7 @@ data EntryDescription = EntryDescription
   , edUncompressedSize :: Natural -- ^ Size of uncompressed entry
   , edOffset           :: Natural -- ^ Absolute offset of local file header
   , edComment          :: Maybe Text -- ^ Entry comment
-  , edExtraFields      :: Map Natural ByteString -- ^ All extra fields found
+  , edExtraField       :: Map Natural ByteString -- ^ All extra fields found
   } deriving (Eq)
 
 -- | Supported compression methods.
@@ -168,7 +168,7 @@ data CompressionMethod
 
 data ArchiveDescription = ArchiveDescription
   { adComment  :: Maybe Text -- ^ Comment of entire archive
-  , adCDOffset :: Natural -- ^ Absolute offset to start of central directory
+  , adCDOffset :: Natural -- ^ Absolute offset of start of central directory
   , adCDSize   :: Natural -- ^ Size of central directory record
   } deriving (Eq, Show)
 

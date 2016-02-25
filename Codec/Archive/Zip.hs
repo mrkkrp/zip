@@ -95,9 +95,9 @@ import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Resource (ResourceT)
+import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.ByteString (ByteString)
-import Data.Conduit (Source, Sink, yield)
+import Data.Conduit (Source, Sink, ($$), yield)
 import Data.Map.Strict (Map)
 import Data.Sequence (Seq, (<|))
 import Data.Text (Text)
@@ -243,7 +243,7 @@ sourceEntry s sink = do
   mdesc <- M.lookup s <$> getEntries
   case mdesc of
     Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> liftIO' (I.sourceEntry path desc sink)
+    Just desc -> liftIO' . runResourceT $ I.sourceEntry path desc $$ sink
 
 -- | Save specific archive entry as a file in the file system.
 --
@@ -308,12 +308,15 @@ loadEntry
   -> Path b File       -- ^ Path to file to add
   -> ZipArchive ()
 loadEntry t f path = do
-  apath <- liftIO' (canonicalizePath path)
-  s     <- f apath
+  apath   <- liftIO' (canonicalizePath path)
+  s       <- f apath
+  modTime <- liftIO' (getModificationTime path)
   let src = CB.sourceFile (toFilePath apath)
   addPending (I.SinkEntry t src s)
+  addPending (I.SetModTime modTime s)
 
--- | Copy entry “as is” from another .ZIP archive.
+-- | Copy entry “as is” from another .ZIP archive. If the entry does not
+-- exists in that archive, 'EntryDoesNotExist' will be eventually thrown.
 
 copyEntry
   :: Path b File       -- ^ Path to archive to copy from
