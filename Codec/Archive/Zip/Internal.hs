@@ -432,7 +432,7 @@ sinkEntry' h s ed src EditingActions {..} = do
         { z64efUncompressedSize =
             bool (edUncompressedSize ed) ddUncompressedSize recompression
         , z64efCompressedSize =
-            bool (edCompressedSize ed) ddUncompressedSize recompression
+            bool (edCompressedSize ed) ddCompressedSize recompression
         , z64efOffset = fromIntegral offset }
       desc = desc'
         { edCRC32 = bool (edCRC32 ed) ddCRC32 recompression
