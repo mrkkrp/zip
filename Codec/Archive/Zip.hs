@@ -155,7 +155,7 @@ createArchive :: (MonadIO m, MonadCatch m)
   -> ZipArchive a      -- ^ Actions that form archive's content
   -> m a
 createArchive path m = do
-  apath <- canonicalizePath path
+  apath <- makeAbsolute path
   ignoringAbsence (removeFile apath)
   let st = ZipState
         { zsFilePath = apath

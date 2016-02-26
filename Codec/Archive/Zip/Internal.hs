@@ -9,8 +9,6 @@
 --
 -- Low-level, non-public concepts and operations.
 
-{-# LANGUAGE BangPatterns #-}
-
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
   , targetEntry
@@ -37,7 +35,6 @@ import Data.Maybe (fromJust, catMaybes, isNothing)
 import Data.Monoid ((<>))
 import Data.Sequence (Seq, (><), (|>))
 import Data.Serialize
-import Data.Set (Set)
 import Data.Text (Text)
 import Data.Time
 import Data.Version
@@ -56,7 +53,9 @@ import qualified Data.Sequence       as S
 import qualified Data.Set            as E
 import qualified Data.Text           as T
 import qualified Data.Text.Encoding  as T
-import qualified System.FilePath     as FP
+
+----------------------------------------------------------------------------
+-- Data types
 
 -- | The sum type describes all possible actions that can be performed on
 -- archive.
@@ -103,21 +102,43 @@ data EditingActions = EditingActions
   , eaModTime      :: Map EntrySelector UTCTime
   , eaExtraFields  :: Map EntrySelector (Map Natural ByteString) }
 
--- | Determine target entry of action.
+-- | Data descriptor representation.
 
-targetEntry :: PendingAction -> Maybe EntrySelector
-targetEntry (SinkEntry      _ _ s) = Just s
-targetEntry (CopyEntry      _ _ s) = Just s
-targetEntry (RenameEntry      s _) = Just s
-targetEntry (DeleteEntry        s) = Just s
-targetEntry (Recompress       _ s) = Just s
-targetEntry (SetEntryComment  _ s) = Just s
-targetEntry (DeleteEntryComment s) = Just s
-targetEntry (SetModTime       _ s) = Just s
-targetEntry (AddExtraField  _ _ s) = Just s
-targetEntry (DeleteExtraField _ s) = Just s
-targetEntry (SetArchiveComment  _) = Nothing
-targetEntry DeleteArchiveComment   = Nothing
+data DataDescriptor = DataDescriptor
+  { ddCRC32            :: Natural
+  , ddCompressedSize   :: Natural
+  , ddUncompressedSize :: Natural }
+
+-- | A temporary data structure to hold Zip64 extra data field information.
+
+data Zip64ExtraField = Zip64ExtraField
+  { z64efUncompressedSize :: Natural
+  , z64efCompressedSize   :: Natural
+  , z64efOffset           :: Natural }
+
+-- | MS-DOS date-time: a pair of Word16s (date, time) with the following
+-- structure:
+--
+-- > DATE bit     0 - 4           5 - 8           9 - 15
+-- >      value   day (1 - 31)    month (1 - 12)  years from 1980
+-- > TIME bit     0 - 4           5 - 10          11 - 15
+-- >      value   seconds*        minute          hour
+-- >              *stored in two-second increments
+
+data MsDosTime = MsDosTime
+  { msDosDate :: Word16
+  , msDosTime :: Word16 }
+
+----------------------------------------------------------------------------
+-- Constants
+
+-- | Version to specify when writing archive data. For now it's a constant.
+
+zipVersion :: Version
+zipVersion = Version [4,6] []
+
+----------------------------------------------------------------------------
+-- Higher-level operations
 
 -- | Scan central directory of an archive and return its description
 -- 'ArchiveDescription' as well as collection of its entries.
@@ -201,13 +222,13 @@ commit
   -> IO ()
 commit path ArchiveDescription {..} entries xs =
   withNewFile (overrideIfExists <> nameTemplate "zip") path $ \temp -> do
-    let (ProducingActions !coping !sinking, !editing) =
+    let (ProducingActions coping sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
         comment = predictComment adComment xs
     withFile (toFilePath temp) WriteMode $ \h -> do
       copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
         copyEntries h srcPath (coping ! srcPath) editing)
-      let !sinkingKeys = M.keys $ sinking `M.difference` copiedCD
+      let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
       sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
         sinkEntry h selector (sinking ! selector) editing)
       writeCD h comment (copiedCD `M.union` sunkCD)
@@ -279,7 +300,8 @@ optimize = foldl' f
     er _ Nothing    = Nothing
 
 -- | Copy entries from another archive and write them into file associated
--- with given handle.
+-- with given handle. This actually can throw 'EntryDoesNotExist' if there
+-- is no such entry in that archive.
 
 copyEntries
   :: Handle            -- ^ Opened 'Handle' of zip archive file
@@ -291,11 +313,10 @@ copyEntries
      -- ^ Info to generate central directory file headers later
 copyEntries h path m e = do
   entries <- snd <$> scanArchive path
-  done    <- forM (M.keys m) $ \s -> do
-    unless (s `M.member` entries) $
-      throwM (EntryDoesNotExist path s)
-    let src = sourceEntry path (entries ! s)
-    sinkEntry h (m ! s) src e
+  done    <- forM (M.keys m) $ \s ->
+    case s `M.lookup` entries of
+      Nothing -> throwM (EntryDoesNotExist path s)
+      Just desc -> sinkEntry h (m ! s) (sourceEntry path desc) e
   return (M.fromList done)
 
 -- | Sink entry from given stream into file associated with given 'Handle'.
@@ -311,25 +332,37 @@ sinkEntry h s src EditingActions {..} = do
   modTime <- getCurrentTime
   offset  <- hTell h
   let compression = M.findWithDefault Store s eaCompression
-      desc = EntryDescription -- to write in local header
-        { edVersionMadeBy    = Version [4,6] []
-        , edVersionNeeded    = Version [4,6] []
+      extraField  = M.findWithDefault M.empty s eaExtraFields
+      desc' = EntryDescription -- to write in local header
+        { edVersionMadeBy    = zipVersion
+        , edVersionNeeded    = zipVersion
         , edCompression      = compression
         , edModified         = M.findWithDefault modTime s eaModTime
-        , edCRC32            = 0 -- real value is in data descriptor
+        , edCRC32            = 0 -- to be overwritten after streaming
         , edCompressedSize   = 0 -- ↑
         , edUncompressedSize = 0 -- ↑
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment
-        , edExtraField       = M.findWithDefault M.empty s eaExtraFields }
-  B.hPut h (runPut (putLocalHeader s desc))
+        , edExtraField       =
+            M.insert 1 (B.replicate 28 0x00) extraField }
+      lhSize = predictLocalHeaderLength s desc'
+  B.hPut h (B.replicate lhSize 0x00)
   DataDescriptor {..} <- runResourceT (src $$ sinkData h compression)
-  -- TODO We must finally decide how to write sizes (compressed and
-  -- uncompressed) and CRC-32 and how to do it when Zip64 is necessary
-  return (s, desc { edCRC32            = ddCRC32
-                  , edCompressedSize   = ddCompressedSize
-                  , edUncompressedSize = ddUncompressedSize
-                  })
+  afterStreaming <- hTell h
+  let zip64 = Zip64ExtraField
+        { z64efUncompressedSize = ddUncompressedSize
+        , z64efCompressedSize   = ddCompressedSize
+        , z64efOffset           = fromIntegral offset }
+      desc = desc'
+        { edCRC32            = ddCRC32
+        , edCompressedSize   = ddCompressedSize
+        , edUncompressedSize = ddUncompressedSize
+        , edExtraField       =
+            M.insert 1 (makeZip64ExtraField zip64) extraField }
+  hSeek h AbsoluteSeek offset
+  B.hPut h (runPut (putLocalHeader s desc))
+  hSeek h AbsoluteSeek afterStreaming
+  return (s, desc)
 
 -- | Create 'Sink' to stream data there. Once streaming is finished, return
 -- 'DataDescriptor' for the streamed data. The action /does not/ close given
@@ -369,10 +402,236 @@ writeCD
   -> Map EntrySelector EntryDescription
   -- ^ Info about already written local headers and entry data
   -> IO ()
-writeCD = undefined -- TODO
+writeCD h comment m = do
+  let cd = runPut (putCD m)
+  cdOffset <- hTell h
+  B.hPut h cd -- write central directory
+  let totalCount = M.size m
+      cdSize     = B.length cd
+      needZip64  = totalCount >= 0xffff
+        || cdSize   >= 0xffffffff
+        || cdOffset >= 0xffffffff
+  when needZip64 $ do
+    zip64ecdOffset <- hTell h
+    B.hPut h . runPut $ putZip64ECD totalCount cdSize cdOffset
+    B.hPut h . runPut $ putZip64ECDLocator zip64ecdOffset
+  B.hPut h . runPut $ putECD
+    (bool totalCount 0xffff     needZip64)
+    (bool cdSize     0xffffffff needZip64)
+    (bool cdOffset   0xffffffff needZip64)
+    comment
 
 ----------------------------------------------------------------------------
 -- Binary serialization
+
+-- | Extract number of bytes between start of file name in local header and
+-- start of actual data.
+
+getLocalHeaderGap :: Get Integer
+getLocalHeaderGap = do
+  getSignature 0x04034b50
+  skip 2 -- version needed to extract
+  skip 2 -- general purpose bit flag
+  skip 2 -- compression method
+  skip 2 -- last mod file time
+  skip 2 -- last mod file date
+  skip 4 -- crc-32 check sum
+  skip 4 -- compressed size
+  skip 4 -- uncompressed size
+  fileNameSize   <- fromIntegral <$> getWord16le -- file name length
+  extraFieldSize <- fromIntegral <$> getWord16le -- extra field length
+  return (fileNameSize + extraFieldSize)
+
+-- | Create 'ByteString' representing local file header.
+
+putLocalHeader :: EntrySelector -> EntryDescription -> Put
+putLocalHeader = putHeader False
+
+-- | Parse central directory file headers and put them into 'Map'.
+
+getCD :: Get (Map EntrySelector EntryDescription)
+getCD = M.fromList . catMaybes <$> many getCDHeader
+
+-- | Parse single central directory file header. If it's a directory or file
+-- compressed with unsupported compression method, 'Nothing' is returned.
+
+getCDHeader :: Get (Maybe (EntrySelector, EntryDescription))
+getCDHeader = do
+  getSignature 0x02014b50 -- central file header signature
+  versionMadeBy  <- toVersion <$> getWord16le -- version made by
+  versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
+  bitFlag        <- getWord16le -- general purpose bit flag
+  when (any (testBit bitFlag) [0,6,13]) $
+    fail "Encrypted archives are not supported"
+  mcompression   <- toCompressionMethod <$> getWord16le -- compression method
+  modTime        <- getWord16le -- last mod file time
+  modDate        <- getWord16le -- last mod file date
+  crc32          <- getWord32le -- CRC32 check sum
+  compressed     <- fromIntegral <$> getWord32le -- compressed size
+  uncompressed   <- fromIntegral <$> getWord32le -- uncompressed size
+  fileNameSize   <- getWord16le -- file name length
+  extraFieldSize <- getWord16le -- extra field length
+  commentSize    <- getWord16le -- file comment size
+  skip 8 -- disk number start, internal/external file attributes
+  offset         <- fromIntegral <$> getWord32le -- offset of local header
+  fileName       <- T.unpack . T.decodeUtf8 <$>
+    getBytes (fromIntegral fileNameSize) -- file name
+  extraFields    <- M.fromList <$>
+    isolate (fromIntegral extraFieldSize) (many getExtraField)
+  -- ↑ extra fields in their raw form
+  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
+  -- ↑ file comment
+  let mz64ef = M.lookup 1 extraFields >>= parseZip64ExtraField
+      with64opt x f =
+        case mz64ef of
+          Nothing -> x
+          Just z64ef -> bool x (f z64ef) (x == 0xffffffff)
+  case mcompression of
+    Nothing -> return Nothing
+    Just compression ->
+      let desc = EntryDescription
+            { edVersionMadeBy    = versionMadeBy
+            , edVersionNeeded    = versionNeeded
+            , edCompression      = compression
+            , edModified         = fromMsDosTime (MsDosTime modDate modTime)
+            , edCRC32            = fromIntegral crc32
+            , edCompressedSize   = with64opt compressed   z64efCompressedSize
+            , edUncompressedSize = with64opt uncompressed z64efUncompressedSize
+            , edOffset           = with64opt offset       z64efOffset
+            , edComment = if commentSize == 0 then Nothing else Just comment
+            , edExtraField       = extraFields }
+      in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
+
+-- | Parse an extra-field.
+
+getExtraField :: Get (Natural, ByteString)
+getExtraField = do
+  header <- getWord16le -- header id
+  size   <- getWord16le -- data size
+  body   <- getBytes (fromIntegral size) -- content
+  return (fromIntegral header, body)
+
+-- | Get signature. If extracted data is not equal to provided signature,
+-- fail.
+
+getSignature :: Word32 -> Get ()
+getSignature sig = do
+  x <- getWord32le -- grab 4-byte signature
+  unless (x == sig) . fail $
+    "Expected signature " ++ show sig ++ ", but got: " ++ show x
+
+-- | Parse 'Zip64ExtraField' from its binary representation.
+
+parseZip64ExtraField :: ByteString -> Maybe Zip64ExtraField
+parseZip64ExtraField b = either (const Nothing) Just . flip runGet b $ do
+  uncompressed <- fromIntegral <$> getWord64le -- uncompressed size
+  compressed   <- fromIntegral <$> getWord64le -- compressed size
+  offset       <- fromIntegral <$> getWord64le -- offset of local file header
+  skip 4 -- number of the disk on which this file starts
+  return (Zip64ExtraField uncompressed compressed offset)
+
+-- | Produce binary representation of 'Zip64ExtraField', 28 bytes long.
+
+makeZip64ExtraField :: Zip64ExtraField -> ByteString
+makeZip64ExtraField Zip64ExtraField {..} = runPut $ do
+  putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
+  putWord64le (fromIntegral z64efCompressedSize) -- compressed size
+  putWord64le (fromIntegral z64efOffset) -- offset of local file header
+  putWord32le 0 -- number of the disk on which this file starts
+
+-- | Create 'ByteString' representing an extra field.
+
+putExtraField :: Map Natural ByteString -> Put
+putExtraField m = forM_ (M.keys m) $ \headerId -> do
+  let b = m ! headerId
+  putWord16le (fromIntegral headerId)
+  putWord16le (fromIntegral $ B.length b)
+  putByteString b
+
+-- | Create 'ByteString' representing entire central directory.
+
+putCD :: Map EntrySelector EntryDescription -> Put
+putCD m = forM_ (M.keys m) $ \s ->
+  putCDHeader s (m ! s)
+
+-- | Create 'ByteString' representing central directory file header.
+
+putCDHeader :: EntrySelector -> EntryDescription -> Put
+putCDHeader = putHeader True
+
+-- | Create 'ByteString' representing local file header if the first
+-- argument is 'False' and central directory file header otherwise.
+
+putHeader
+  :: Bool              -- ^ Generate central directory file header
+  -> EntrySelector     -- ^ Name of entry to write
+  -> EntryDescription  -- ^ Description of entry
+  -> Put
+putHeader c s EntryDescription {..} = do
+  putWord32le (bool 0x04034b50 0x02014b50 c)
+  -- ↑ local/central file header signature
+  when c $
+    putWord16le (fromVersion edVersionMadeBy) -- version made by
+  putWord16le (fromVersion edVersionNeeded) -- version needed to extract
+  let entryName = getEntryName s
+      rawName   = T.encodeUtf8 entryName
+      comment   = maybe B.empty T.encodeUtf8 edComment
+      unicode   = needsUnicode entryName
+        || maybe False needsUnicode edComment
+      modTime   = toMsDosTime edModified
+  putWord16le (if unicode then 0x0000 else 0x0800)
+  -- ↑ general purpose bit-flag
+  putWord16le (fromCompressionMethod edCompression) -- compression method
+  putWord16le (msDosTime modTime) -- last mod file time
+  putWord16le (msDosDate modTime) -- last mod file date
+  putWord32le (fromIntegral edCRC32) -- CRC-32 checksum
+  putWord32le (fromIntegral edCompressedSize) -- compressed size
+  putWord32le (fromIntegral edUncompressedSize) -- uncompressed size
+  putWord16le (fromIntegral $ B.length rawName) -- file name length
+  putWord16le (fromIntegral $ predictExtraFieldLength edExtraField)
+  -- ↑ extra field length
+  when c $ do
+    putWord16le (fromIntegral $ B.length comment) -- file comment length
+    putWord16le 0 -- disk number start
+    putWord16le 0 -- internal file attributes
+    putWord32le 0 -- external file attributes
+    putWord32le (fromIntegral edOffset) -- relative offset of local header
+  putByteString rawName -- file name (variable size)
+  putExtraField edExtraField -- extra field (variable size)
+  when c (putByteString comment) -- file comment (variable size)
+
+-- | Create 'ByteString' representing Zip64 end of central directory record.
+
+putZip64ECD
+  :: Int               -- ^ Total number of entries
+  -> Int               -- ^ Size of the central directory
+  -> Integer           -- ^ Offset of central directory record
+  -> Put
+putZip64ECD totalCount cdSize cdOffset = do
+  putWord32le 0x06064b50 -- zip64 end of central dir signature
+  putWord64le 44 -- size of zip64 end of central dir record
+  putWord16le (fromVersion zipVersion) -- version made by
+  putWord16le (fromVersion zipVersion) -- version needed to extract
+  putWord32le 0 -- number of this disk
+  putWord32le 0 -- number of the disk with the start of the central directory
+  putWord64le (fromIntegral totalCount) -- total number of entries (this disk)
+  putWord64le (fromIntegral totalCount) -- total number of entries
+  putWord64le (fromIntegral cdSize) -- size of the central directory
+  putWord64le (fromIntegral cdOffset) -- offset of central directory
+
+-- | Create 'ByteString' representing Zip64 end of central directory
+-- locator.
+
+putZip64ECDLocator
+  :: Integer           -- ^ Offset of Zip64 end of central directory
+  -> Put
+putZip64ECDLocator ecdOffset = do
+  putWord32le 0x07064b50 -- zip64 end of central dir locator signature
+  putWord32le 0 -- number of the disk with the start of the zip64 end of
+    -- central directory
+  putWord64le (fromIntegral ecdOffset) -- relative offset of the zip64 end
+    -- of central directory record
+  putWord32le 1 -- total number of disks
 
 -- | Parse end of central directory record or Zip64 end of central directory
 -- record depending on signature binary data begins with.
@@ -413,152 +672,25 @@ getECD = do
     , adCDOffset = fromIntegral cdOffset
     , adCDSize   = fromIntegral cdSize }
 
--- | Parse central directory file headers and put them into 'Map'.
+-- | Create 'ByteString' representing end of central directory record.
 
-getCD :: Get (Map EntrySelector EntryDescription)
-getCD = M.fromList . catMaybes <$> many getCDHeader
-
--- | Parse single central directory file header. If it's a directory or file
--- compressed with unsupported compression method, 'Nothing' is returned.
-
-getCDHeader :: Get (Maybe (EntrySelector, EntryDescription))
-getCDHeader = do
-  getSignature 0x02014b50 -- central file header signature
-  versionMadeBy  <- toVersion <$> getWord16le -- version made by
-  versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
-  bitFlag        <- getWord16le -- general purpose bit flag
-  when (any (testBit bitFlag) [0,6,13]) $
-    fail "Encrypted archives are not supported"
-  mcompression   <- toCompressionMethod <$> getWord16le -- compression method
-  modTime        <- getWord16le -- last mod file time
-  modDate        <- getWord16le -- last mod file date
-  crc32          <- getWord32le -- CRC32 check sum
-  compressed     <- fromIntegral <$> getWord32le -- compressed size
-  uncompressed   <- fromIntegral <$> getWord32le -- uncompressed size
-  fileNameSize   <- getWord16le -- file name length
-  extraFieldSize <- getWord16le -- extra field length
-  commentSize    <- getWord16le -- file comment size
-  skip 2 -- disk number start
-  skip 2 -- internal file attributes
-  skip 4 -- external file attributes
-  offset         <- fromIntegral <$> getWord32le -- offset of local header
-  fileName       <- T.unpack . T.decodeUtf8 <$>
-    getBytes (fromIntegral fileNameSize) -- file name
-  extraFields    <- M.fromList <$>
-    isolate (fromIntegral extraFieldSize) (many getExtraField)
-  -- ↑ extra fields in their raw form
-  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
-  -- ↑ file comment
-  let mz64ef = M.lookup 1 extraFields >>= parseZip64ExtraFiled
-      with64opt x f =
-        case mz64ef of
-          Nothing -> x
-          Just z64ef -> bool x (f z64ef) (x == 0xffffffff)
-  case mcompression of
-    Nothing -> return Nothing
-    Just compression ->
-      let desc = EntryDescription
-            { edVersionMadeBy    = versionMadeBy
-            , edVersionNeeded    = versionNeeded
-            , edCompression      = compression
-            , edModified         = fromMsDosTime (MsDosTime modDate modTime)
-            , edCRC32            = fromIntegral crc32
-            , edCompressedSize   = with64opt compressed   z64efCompressedSize
-            , edUncompressedSize = with64opt uncompressed z64efUncompressedSize
-            , edOffset           = with64opt offset       z64efOffset
-            , edComment = if commentSize == 0 then Nothing else Just comment
-            , edExtraField       = extraFields }
-      in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
-
--- | Parse an extra-field.
-
-getExtraField :: Get (Natural, ByteString)
-getExtraField = do
-  header <- getWord16le -- header id
-  size   <- getWord16le -- data size
-  body   <- getBytes (fromIntegral size) -- content
-  return (fromIntegral header, body)
-
--- | Extract number of bytes between start of file name in local header and
--- start of actual data.
-
-getLocalHeaderGap :: Get Integer
-getLocalHeaderGap = do
-  getSignature 0x04034b50
-  skip 2 -- version needed to extract
-  skip 2 -- general purpose bit flag
-  skip 2 -- compression method
-  skip 2 -- last mod file time
-  skip 2 -- last mod file date
-  skip 4 -- crc-32 check sum
-  skip 4 -- compressed size
-  skip 4 -- uncompressed size
-  fileNameSize   <- fromIntegral <$> getWord16le -- file name length
-  extraFieldSize <- fromIntegral <$> getWord16le -- extra field length
-  return (fileNameSize + extraFieldSize)
-
--- | Get signature. If extracted data is not equal to provided signature,
--- fail.
-
-getSignature :: Word32 -> Get ()
-getSignature sig = do
-  x <- getWord32le -- grab 4-byte signature
-  unless (x == sig) . fail $
-    "Expected signature " ++ show sig ++ ", but got: " ++ show x
-
--- | Create 'ByteString' representing local file header.
-
-putLocalHeader :: EntrySelector -> EntryDescription -> Put
-putLocalHeader s EntryDescription {..} = do
-  putWord32le 0x04034b50 -- local file header signature
-  putWord16le (fromVersion edVersionNeeded) -- version needed to extract
-  let entryName = getEntryName s
-      rawName   = T.encodeUtf8 entryName
-      unicode   = needsUnicode entryName
-        || maybe False needsUnicode edComment
-      modTime   = toMsDosTime edModified
-  putWord16le (if unicode then 0x0004 else 0x0808)
-  -- ↑ general purpose bit-flag
-  putWord16le (fromCompressionMethod edCompression) -- compression method
-  putWord16le (msDosTime modTime) -- last mod file time
-  putWord16le (msDosDate modTime) -- last mod file date
-  putWord32le (fromIntegral edCRC32) -- CRC-32 checksum
-  putWord32le (fromIntegral edCompressedSize) -- compressed size
-  putWord32le (fromIntegral edUncompressedSize) -- uncompressed size
-  putWord16le (fromIntegral $ B.length rawName) -- file name length
-  putWord16le (fromIntegral $ predictExtraFieldLength edExtraField)
-  -- ↑ extra field length
-  putByteString rawName -- file name (variable size)
-  forM_ (M.keys edExtraField) $ \n ->
-    putExtraField n (edExtraField ! n)
-  -- ↑ extra field (variable size)
-
--- | Create 'ByteString' representing an extra field.
-
-putExtraField :: Natural -> ByteString -> Put
-putExtraField headerId b = do
-  putWord16le (fromIntegral headerId)
-  putWord16le (fromIntegral $ B.length b)
-  putByteString b
-
--- | Create 'ByteString' representing entire central directory.
-
-putCD :: Map EntrySelector EntryDescription -> Put
-putCD m = forM_ (M.keys m) $ \s ->
-  putCDHeader s (m ! s)
-
--- | Create 'ByteString' representing central directory file header.
-
-putCDHeader :: EntrySelector -> EntryDescription -> Put
-putCDHeader = undefined -- TODO
-
--- | Create 'ByteString' representing Zip64 end of central directory record.
-
-putZip64ECD :: Put -- FIXME
-putZip64ECD = undefined -- TODO
-
--- TODO Zip64 end of central directory locator
--- TODO end of central directory signature
+putECD
+  :: Int               -- ^ Total number of entries
+  -> Int               -- ^ Size of the central directory
+  -> Integer           -- ^ Offset of central directory record
+  -> Maybe Text        -- ^ Zip file comment
+  -> Put
+putECD totalCount cdSize cdOffset mcomment = do
+  putWord32le 0x06054b50 -- end of central dir signature
+  putWord16le 0 -- number of this disk
+  putWord16le 0 -- number of the disk with the start of the central directory
+  putWord16le (fromIntegral totalCount) -- total number of entries on this disk
+  putWord16le (fromIntegral totalCount) -- total number of entries
+  putWord32le (fromIntegral cdSize) -- size of central directory
+  putWord32le (fromIntegral cdOffset) -- offset of start of central directory
+  let comment = maybe B.empty T.encodeUtf8 mcomment
+  putWord16le (fromIntegral $ B.length comment)
+  putByteString comment
 
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
@@ -624,6 +756,50 @@ locateECD path h = sizeCheck
 ----------------------------------------------------------------------------
 -- Helpers
 
+-- | Chain 'Maybe' monad inside 'IO' monad.
+
+infixl 1 >>+
+
+(>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
+a >>+ b = a >>= maybe (return Nothing) b
+
+-- | Rename entry (key) in a 'Map'.
+
+renameKey :: Ord k => k -> k -> Map k a -> Map k a
+renameKey ok nk m = case M.lookup ok m of
+  Nothing -> m
+  Just e -> M.insert nk e (M.delete ok m)
+
+-- | Return length of local header.
+
+predictLocalHeaderLength :: EntrySelector -> EntryDescription -> Int
+predictLocalHeaderLength s e = 30
+  + B.length (T.encodeUtf8 $ getEntryName s)
+  + predictExtraFieldLength (edExtraField e)
+
+-- | Return number of bytes that given collection of extra fields will
+-- occupy.
+
+predictExtraFieldLength :: Map Natural ByteString -> Int
+predictExtraFieldLength = M.foldl' f 0
+  where f t b = 4 + B.length b + t
+
+-- | Determine target entry of action.
+
+targetEntry :: PendingAction -> Maybe EntrySelector
+targetEntry (SinkEntry      _ _ s) = Just s
+targetEntry (CopyEntry      _ _ s) = Just s
+targetEntry (RenameEntry      s _) = Just s
+targetEntry (DeleteEntry        s) = Just s
+targetEntry (Recompress       _ s) = Just s
+targetEntry (SetEntryComment  _ s) = Just s
+targetEntry (DeleteEntryComment s) = Just s
+targetEntry (SetModTime       _ s) = Just s
+targetEntry (AddExtraField  _ _ s) = Just s
+targetEntry (DeleteExtraField _ s) = Just s
+targetEntry (SetArchiveComment  _) = Nothing
+targetEntry DeleteArchiveComment   = Nothing
+
 -- | Detect if the given text needs newer Unicode-aware features to be
 -- properly encoded in archive.
 
@@ -661,50 +837,6 @@ fromCompressionMethod Store   = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2   = 12
 
--- | A temporary data structure to hold Zip64 extra data field information.
-
-data Zip64ExtraField = Zip64ExtraField
-  { z64efUncompressedSize :: Natural
-  , z64efCompressedSize   :: Natural
-  , z64efOffset           :: Natural }
-
--- | Parse 'Zip64ExtraField' from its binary representation.
-
-parseZip64ExtraFiled :: ByteString -> Maybe Zip64ExtraField
-parseZip64ExtraFiled b = either (const Nothing) Just . flip runGet b $ do
-  uncompressed <- fromIntegral <$> getWord64le -- uncompressed size
-  compressed   <- fromIntegral <$> getWord64le -- compressed size
-  offset       <- fromIntegral <$> getWord64le -- offset of local file header
-  return (Zip64ExtraField uncompressed compressed offset)
-
--- | Return number of bytes that given collection of extra fields will
--- occupy.
-
-predictExtraFieldLength :: Map Natural ByteString -> Int
-predictExtraFieldLength = M.foldl' f 0
-  where f t b = 4 + B.length b + t
-
--- | Data descriptor representation.
-
-data DataDescriptor = DataDescriptor
-  { ddCRC32 :: Natural
-  , ddCompressedSize :: Natural
-  , ddUncompressedSize :: Natural }
-
--- | MS-DOS date-time: a pair of Word16s (date, time) with the following
--- structure:
---
--- > DATE bit     0 - 4           5 - 8           9 - 15
--- >      value   day (1 - 31)    month (1 - 12)  years from 1980
--- > TIME bit     0 - 4           5 - 10          11 - 15
--- >      value   seconds*        minute          hour
--- >              *stored in two-second increments
-
-data MsDosTime = MsDosTime
-  { msDosDate :: Word16
-  , msDosTime :: Word16
-  } deriving (Read, Show, Eq)
-
 -- | Convert 'UTCTime' to MS-DOS time format.
 
 toMsDosTime :: UTCTime -> MsDosTime
@@ -735,17 +867,3 @@ fromMsDosTime MsDosTime {..} = UTCTime
     day     = fromIntegral (msDosDate .&. 0x1f)
     month   = fromIntegral $ shiftR msDosDate 5 .&. 0xf
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
-
--- | Chains 'Maybe' monad inside 'IO' monad.
-
-infixl 1 >>+
-
-(>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
-a >>+ b = a >>= maybe (return Nothing) b
-
--- | Rename entry (key) in a 'Map'.
-
-renameKey :: Ord k => k -> k -> Map k a -> Map k a
-renameKey ok nk m = case M.lookup ok m of
-  Nothing -> m
-  Just e -> M.insert nk e (M.delete ok m)
