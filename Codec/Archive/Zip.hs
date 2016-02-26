@@ -13,10 +13,12 @@
 -- avoid confusion in the future.
 --
 -- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
--- 'File' things. This method may seem awkward at first, but it will protect
+-- 'File' paths. This method may seem awkward at first, but it will protect
 -- you from problems with portability when your archive is unpacked on a
 -- different platform. Using of well-typed paths is also something you
--- should consider doing in your projects anyway.
+-- should consider doing in your projects anyway. Even if you don't want to
+-- use "Path" module in your project, it's easy to marshal 'FilePath' to
+-- 'Path' just before using functions from the library.
 --
 -- The second thing, that is rather a consequence of the first, is that
 -- there is no way to add directories, or to be precise, /empty directories/
@@ -30,11 +32,6 @@
 -- actions are performed automatically when you leave the realm of
 -- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
 -- function is your friend. There are even “undo” functions, by the way.
---
--- Let's take a look at some examples that show how to accomplish most
--- typical tasks with help of the library.
---
--- TODO Add examples here.
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -45,7 +42,7 @@ module Codec.Archive.Zip
   , mkEntrySelector
   , unEntrySelector
   , getEntryName
-  , EntrySelectorException
+  , EntrySelectorException (..)
     -- ** Entry description
   , EntryDescription (..)
   , CompressionMethod (..)
@@ -99,7 +96,7 @@ import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink, ($$), yield)
 import Data.Map.Strict (Map)
-import Data.Sequence (Seq, (<|))
+import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Numeric.Natural
@@ -121,7 +118,7 @@ import qualified Data.Set                   as E
 -- module and their combinations.
 --
 -- Note: you cannot perform 'IO' actions in this monad, although provided
--- primitives can do it internally.
+-- primitives can do it for you.
 
 newtype ZipArchive a = ZipArchive
   { unZipArchive :: StateT ZipState IO a
@@ -165,7 +162,7 @@ createArchive path m = do
       action = unZipArchive (liftM2 const m commit)
   liftIO (evalStateT action st)
 
--- | Work with already existing archive. See 'createArchive' if you want to
+-- | Work with an existing archive. See 'createArchive' if you want to
 -- create new archive instead.
 --
 -- This operation may fail with:
@@ -210,6 +207,10 @@ withArchive path m = do
 
 -- | Retrieve description of all archive entries. This is an efficient
 -- operation that can be used for example to list all entries in archive.
+--
+-- For example, this will return list of all entries in an archive:
+--
+-- > withArchive archivePath (M.keys <$> getEntries)
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
@@ -252,7 +253,7 @@ sourceEntry s sink = do
 saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
   -> Path b File       -- ^ Where to save the file
-  -> ZipArchive ()     -- ^ Was the file found in the archive?
+  -> ZipArchive ()
 saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
 
 -- | Unpack entire archive into specified directory. The directory will be
@@ -295,7 +296,7 @@ addEntry t b s = addPending (I.SinkEntry t (yield b) s)
 
 sinkEntry
   :: CompressionMethod -- ^ Compression method to use
-  -> Source (ResourceT IO) ByteString -- ^ Source of entry content
+  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
   -> EntrySelector     -- ^ Name of entry to add
   -> ZipArchive ()
 sinkEntry t src s = addPending (I.SinkEntry t src s)
@@ -328,9 +329,9 @@ copyEntry path s' s = do
   addPending (I.CopyEntry apath s' s)
 
 -- | Add entire directory to archive. Please note that due to design of the
--- library, empty directories won't be added to archive.
+-- library, empty sub-directories won't be added.
 --
--- The action can throw the same exceptions as 'listDir' and
+-- The action can throw the same exceptions as 'listDirRecur' and
 -- 'InvalidEntrySelector'.
 
 packDirRecur
@@ -342,20 +343,22 @@ packDirRecur t f path = do
   files <- snd <$> liftIO' (listDirRecur path)
   mapM_ (loadEntry t f) files
 
--- | Rename entry in archive.
+-- | Rename entry in archive. If the entry does not exist, nothing will
+-- happen.
 
 renameEntry
-  :: EntrySelector     -- ^ Old entry name
+  :: EntrySelector     -- ^ Original entry name
   -> EntrySelector     -- ^ New entry name
   -> ZipArchive ()
 renameEntry old new = addPending (I.RenameEntry old new)
 
--- | Delete entry from archive.
+-- | Delete entry from archive, if it does not exist, nothing will happen.
 
 deleteEntry :: EntrySelector -> ZipArchive ()
 deleteEntry s = addPending (I.DeleteEntry s)
 
--- | Change compression method of an entry.
+-- | Change compression method of an entry, if it does not exist, nothing
+-- will happen.
 
 recompress
   :: CompressionMethod -- ^ New compression method
@@ -363,7 +366,7 @@ recompress
   -> ZipArchive ()
 recompress t s = addPending (I.Recompress t s)
 
--- | Set entry comment.
+-- | Set entry comment, if that entry does not exist, nothing will happen.
 
 setEntryComment
   :: Text              -- ^ Text of the comment
@@ -371,12 +374,14 @@ setEntryComment
   -> ZipArchive ()
 setEntryComment text s = addPending (I.SetEntryComment text s)
 
--- | Delete entry's comment.
+-- | Delete entry's comment, if that entry does not exist, nothing will
+-- happen.
 
 deleteEntryComment :: EntrySelector -> ZipArchive ()
 deleteEntryComment s = addPending (I.DeleteEntryComment s)
 
--- | Set “last modification” date\/time.
+-- | Set “last modification” date\/time. Specified entry may be missing, in
+-- that case this action has no effect.
 
 setModTime
   :: UTCTime           -- ^ New modification time
@@ -384,16 +389,18 @@ setModTime
   -> ZipArchive ()
 setModTime time s = addPending (I.SetModTime time s)
 
--- | Add an extra field.
+-- | Add an extra field. Specified entry may be missing, in that case this
+-- action has no effect.
 
 addExtraField
   :: Natural           -- ^ Extra field to add
   -> ByteString        -- ^ Body of the field
   -> EntrySelector     -- ^ Name of entry to modify
-  -> ZipArchive ()     -- ^ 'True' on success
+  -> ZipArchive ()
 addExtraField n b s = addPending (I.AddExtraField n b s)
 
--- | Delete an extra field by its type.
+-- | Delete an extra field by its type (tag). Specified entry may be
+-- missing, in that case this action has no effect.
 
 deleteExtraField
   :: Natural           -- ^ Type of extra field to delete

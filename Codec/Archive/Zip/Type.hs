@@ -19,7 +19,7 @@ module Codec.Archive.Zip.Type
   , mkEntrySelector
   , unEntrySelector
   , getEntryName
-  , EntrySelectorException
+  , EntrySelectorException (..)
     -- * Entry description
   , EntryDescription (..)
   , CompressionMethod (..)
@@ -77,7 +77,7 @@ newtype EntrySelector = EntrySelector
 instance Show EntrySelector where
   show = show . unEntrySelector
 
--- | Create 'EntrySelector' from 'Path Rel File'. To avoid problems with
+-- | Create 'EntrySelector' from @Path Rel File@. To avoid problems with
 -- distribution of the archive, characters that some operating systems do
 -- not expect in paths are not allowed. Proper paths should pass these
 -- checks:
@@ -98,7 +98,7 @@ mkEntrySelector path =
        else throwM (InvalidEntrySelector path)
 
 -- | Make a relative path from 'EntrySelector'. Every 'EntrySelector'
--- produces single 'Path Rel File' that corresponds to it.
+-- produces single @Path Rel File@ that corresponds to it.
 
 unEntrySelector :: EntrySelector -> Path Rel File
 unEntrySelector = unES
@@ -178,23 +178,15 @@ data ArchiveDescription = ArchiveDescription
 -- | Bad things that can happen when you use the library.
 
 data ZipException
-  = EntryDoesNotExist       (Path Abs File) EntrySelector
-  | EntryAlreadyExists      (Path Abs File) EntrySelector
-  | ExtraFieldDoesNotExist  (Path Abs File) EntrySelector Natural
-  | ExtraFieldAlreadyExists (Path Abs File) EntrySelector Natural
-  | ParsingFailed           (Path Abs File) String
+  = EntryDoesNotExist (Path Abs File) EntrySelector
+    -- ^ Thrown when you try to get contents of non-existing entry
+  | ParsingFailed     (Path Abs File) String
+    -- ^ Thrown when archive structure cannot be parsed
   deriving (Typeable)
 
 instance Show ZipException where
   show (EntryDoesNotExist file s) =
     "No such entry found: " ++ show s ++ " in " ++ show file
-  show (EntryAlreadyExists file s) =
-    "Entry already exists: " ++ show s ++ " in " ++ show file
-  show (ExtraFieldDoesNotExist file s n) =
-    "No such extra field: " ++ show s ++ " " ++ show n ++ " in " ++ show file
-  show (ExtraFieldAlreadyExists file s n) =
-    "Extra field already exists: " ++
-    show s ++ " " ++ show n ++ " in " ++ show file
   show (ParsingFailed file msg) =
     "Parsing of archive structure failed: \n" ++ msg ++ "\nin " ++ show file
 
