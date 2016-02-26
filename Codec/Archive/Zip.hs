@@ -481,4 +481,4 @@ modifyActions f = ZipArchive (modify g)
 -- | Add new action to the list of pending actions.
 
 addPending :: I.PendingAction -> ZipArchive ()
-addPending a = modifyActions (a <|)
+addPending a = modifyActions (|> a)
