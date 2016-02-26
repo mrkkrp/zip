@@ -18,7 +18,7 @@ module Codec.Archive.Zip.Internal
 where
 
 import Codec.Archive.Zip.Type
-import Control.Applicative (many)
+import Control.Applicative (many, (<|>))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Resource (ResourceT, runResourceT)
@@ -26,7 +26,7 @@ import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Source, Sink, (=$=), ($$), awaitForever, yield)
+import Data.Conduit (Conduit, Source, Sink, (=$=), ($$), awaitForever, yield)
 import Data.Conduit.Internal (zipSinks)
 import Data.Digest.CRC32 (crc32Update)
 import Data.Foldable (foldl')
@@ -97,10 +97,12 @@ data ProducingActions = ProducingActions
 -- existing entries.
 
 data EditingActions = EditingActions
-  { eaCompression  :: Map EntrySelector CompressionMethod
-  , eaEntryComment :: Map EntrySelector Text
-  , eaModTime      :: Map EntrySelector UTCTime
-  , eaExtraFields  :: Map EntrySelector (Map Natural ByteString) }
+  { eaCompression   :: Map EntrySelector CompressionMethod
+  , eaEntryComment  :: Map EntrySelector Text
+  , eaDeleteComment :: Map EntrySelector ()
+  , eaModTime       :: Map EntrySelector UTCTime
+  , eaExtraField    :: Map EntrySelector (Map Natural ByteString)
+  , eaDeleteField   :: Map EntrySelector (Map Natural ()) }
 
 -- | Data descriptor representation.
 
@@ -187,13 +189,15 @@ scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
       throwM (ParsingFailed path "Cannot locate end of central directory")
 
 -- | Given location of archive and information about specific archive entry
--- 'EntryDescription', return 'Source' of its uncompressed data.
+-- 'EntryDescription', return 'Source' of its data. Actual data can be
+-- compressed or uncompressed depending on the third argument.
 
 sourceEntry
   :: Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
+  -> Bool              -- ^ Should we stream uncompressed data?
   -> Source (ResourceT IO) ByteString -- ^ Source of uncompressed data
-sourceEntry path EntryDescription {..} =
+sourceEntry path EntryDescription {..} d =
   source =$= CB.isolate (fromIntegral edCompressedSize) =$= decompress
   where
     source = CB.sourceIOHandle $ do
@@ -205,10 +209,9 @@ sourceEntry path EntryDescription {..} =
         Right gap -> do
           hSeek h RelativeSeek gap
           return h
-    decompress = case edCompression of
-      Store   -> awaitForever yield
-      Deflate -> Z.decompress $ Z.WindowBits (-15)
-      BZip2   -> BZ.bunzip2
+    decompress = if d
+      then decompressingPipe edCompression
+      else awaitForever yield
 
 -- | Undertake /all/ actions specified as the fourth argument of the
 -- function. This transforms given pending actions so they can be performed
@@ -262,19 +265,24 @@ optimize
   -> (ProducingActions, EditingActions) -- ^ Optimized data
 optimize = foldl' f
   ( ProducingActions M.empty M.empty
-  , EditingActions   M.empty M.empty M.empty M.empty )
+  , EditingActions   M.empty M.empty M.empty M.empty M.empty M.empty )
   where
     f (pa, ea) a = case a of
       SinkEntry m src s ->
         ( pa { paSinkEntry   = M.insert s src (paSinkEntry pa) }
         , ea { eaCompression = M.insert s m (eaCompression ea) } )
       CopyEntry path os ns ->
-        ( pa { paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa)}
+        ( pa { paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa) }
         , ea )
       RenameEntry os ns ->
         ( pa { paCopyEntry = M.map (M.map $ re os ns) (paCopyEntry pa)
              , paSinkEntry = renameKey os ns (paSinkEntry pa) }
-        , ea )
+        , ea { eaCompression   = renameKey os ns (eaCompression ea)
+             , eaEntryComment  = renameKey os ns (eaEntryComment ea)
+             , eaDeleteComment = renameKey os ns (eaDeleteComment ea)
+             , eaModTime       = renameKey os ns (eaModTime ea)
+             , eaExtraField    = renameKey os ns (eaExtraField ea)
+             , eaDeleteField   = renameKey os ns (eaDeleteField ea) } )
       DeleteEntry s ->
         ( pa { paSinkEntry = M.delete s (paSinkEntry pa)
              , paCopyEntry = M.map (M.delete s) (paCopyEntry pa) }
@@ -284,13 +292,17 @@ optimize = foldl' f
       SetEntryComment txt s ->
         (pa, ea { eaEntryComment = M.insert s txt (eaEntryComment ea) })
       DeleteEntryComment s ->
-        (pa, ea { eaEntryComment = M.delete s (eaEntryComment ea) })
+        ( pa
+        , ea { eaEntryComment  = M.delete s (eaEntryComment ea)
+             , eaDeleteComment = M.insert s () (eaDeleteComment ea) } )
       SetModTime time s ->
         (pa, ea { eaModTime = M.insert s time (eaModTime ea) })
       AddExtraField n b s ->
-        (pa, ea { eaExtraFields = M.alter (ef n b) s (eaExtraFields ea) })
+        (pa, ea { eaExtraField = M.alter (ef n b) s (eaExtraField ea) })
       DeleteExtraField n s ->
-        (pa, ea { eaExtraFields = M.alter (er n) s (eaExtraFields ea) })
+        ( pa
+        , ea { eaExtraField = M.alter (er n) s (eaExtraField ea)
+             , eaDeleteField = M.alter (ef n ()) s (eaDeleteField ea) } )
       _ -> (pa, ea)
     re o n x = if x == o then n else x
     ef k v (Just m) = Just (M.insert k v m)
@@ -316,7 +328,7 @@ copyEntries h path m e = do
   done    <- forM (M.keys m) $ \s ->
     case s `M.lookup` entries of
       Nothing -> throwM (EntryDoesNotExist path s)
-      Just desc -> sinkEntry h (m ! s) (sourceEntry path desc) e
+      Just desc -> sinkEntry' h (m ! s) desc (sourceEntry path desc False) e
   return (M.fromList done)
 
 -- | Sink entry from given stream into file associated with given 'Handle'.
@@ -332,7 +344,7 @@ sinkEntry h s src EditingActions {..} = do
   modTime <- getCurrentTime
   offset  <- hTell h
   let compression = M.findWithDefault Store s eaCompression
-      extraField  = M.findWithDefault M.empty s eaExtraFields
+      extraField  = M.findWithDefault M.empty s eaExtraField
       desc' = EntryDescription -- to write in local header
         { edVersionMadeBy    = zipVersion
         , edVersionNeeded    = zipVersion
@@ -349,16 +361,85 @@ sinkEntry h s src EditingActions {..} = do
   B.hPut h (B.replicate lhSize 0x00)
   DataDescriptor {..} <- runResourceT (src $$ sinkData h compression)
   afterStreaming <- hTell h
-  let zip64 = Zip64ExtraField
+  let needZip64 = ddUncompressedSize >= 0xffffffff
+        || ddCompressedSize >= 0xffffffff
+        || offset >= 0xffffffff
+      zip64 = Zip64ExtraField
         { z64efUncompressedSize = ddUncompressedSize
         , z64efCompressedSize   = ddCompressedSize
         , z64efOffset           = fromIntegral offset }
       desc = desc'
         { edCRC32            = ddCRC32
-        , edCompressedSize   = ddCompressedSize
-        , edUncompressedSize = ddUncompressedSize
+        , edCompressedSize   =
+            bool (z64efCompressedSize zip64) 0xffffffff needZip64
+        , edUncompressedSize =
+            bool (z64efUncompressedSize zip64) 0xffffffff needZip64
         , edExtraField       =
             M.insert 1 (makeZip64ExtraField zip64) extraField }
+  hSeek h AbsoluteSeek offset
+  B.hPut h (runPut (putLocalHeader s desc))
+  hSeek h AbsoluteSeek afterStreaming
+  return (s, desc)
+
+-- | Just like 'sinkEntry', but takes existing 'EntryDecsription'. This is
+-- to be used when copying entries from another archive. Although this could
+-- be implemented in 'sinkEntry', I found resulting code too difficult to
+-- understand (and thus maintain), so here we go.
+
+sinkEntry'
+  :: Handle            -- ^ Opened 'Handle' of zip archive file
+  -> EntrySelector     -- ^ Name of entry to add
+  -> EntryDescription  -- ^ Entry description
+  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
+  -> EditingActions    -- ^ Additional info that can influence result
+  -> IO (EntrySelector, EntryDescription)
+     -- ^ Info to generate central directory file headers later
+sinkEntry' h s ed src EditingActions {..} = do
+  modTime <- getCurrentTime
+  offset  <- hTell h
+  let compressed    = edCompression ed
+      compression   = M.findWithDefault compressed s eaCompression
+      recompression = compression /= compressed
+      extraField    =
+        (M.findWithDefault M.empty s eaExtraField `M.union` edExtraField ed)
+        `M.difference` M.findWithDefault M.empty s eaDeleteField
+      oldComment    = case M.lookup s eaDeleteComment of
+        Nothing -> edComment ed
+        Just () -> Nothing
+      desc' = EntryDescription
+        { edVersionMadeBy    = zipVersion
+        , edVersionNeeded    = zipVersion
+        , edCompression      = compression
+        , edModified         = M.findWithDefault modTime s eaModTime
+        , edCRC32            = 0 -- to be overwritten after streaming
+        , edCompressedSize   = 0 -- ↑
+        , edUncompressedSize = 0 -- ↑
+        , edOffset           = fromIntegral offset
+        , edComment          = M.lookup s eaEntryComment <|> oldComment
+        , edExtraField       =
+            M.insert 1 (B.replicate 28 0x00) extraField }
+      lhSize = predictLocalHeaderLength s desc'
+  B.hPut h (B.replicate lhSize 0x00)
+  DataDescriptor {..} <- runResourceT $
+    if recompression
+      then src =$= decompressingPipe compressed $$ sinkData h compression
+      else src $$ sinkData h Store
+  afterStreaming <- hTell h
+  let needZip64 = ddUncompressedSize >= 0xffffffff
+        || ddCompressedSize >= 0xffffffff
+        || offset >= 0xffffffff
+      zip64 = Zip64ExtraField
+        { z64efUncompressedSize =
+            bool (edUncompressedSize ed) ddUncompressedSize recompression
+        , z64efCompressedSize =
+            bool (edCompressedSize ed) ddUncompressedSize recompression
+        , z64efOffset = fromIntegral offset }
+      desc = desc'
+        { edCRC32 = bool (edCRC32 ed) ddCRC32 recompression
+        , edCompressedSize =
+            bool (z64efCompressedSize zip64) 0xffffffff needZip64
+        , edUncompressedSize =
+            bool (z64efUncompressedSize zip64) 0xffffffff needZip64 }
   hSeek h AbsoluteSeek offset
   B.hPut h (runPut (putLocalHeader s desc))
   hSeek h AbsoluteSeek afterStreaming
@@ -829,13 +910,23 @@ toCompressionMethod 8  = Just Deflate
 toCompressionMethod 12 = Just BZip2
 toCompressionMethod _  = Nothing
 
--- | Covert 'CompressionMethod' to its numeric representation as per .ZIP
+-- | Convert 'CompressionMethod' to its numeric representation as per .ZIP
 -- specification.
 
 fromCompressionMethod :: CompressionMethod -> Word16
 fromCompressionMethod Store   = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2   = 12
+
+-- | Return decompressing 'Conduit' corresponding to given compression
+-- method.
+
+decompressingPipe
+  :: CompressionMethod
+  -> Conduit ByteString (ResourceT IO) ByteString
+decompressingPipe Store   = awaitForever yield
+decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
+decompressingPipe BZip2   = BZ.bunzip2
 
 -- | Convert 'UTCTime' to MS-DOS time format.
 

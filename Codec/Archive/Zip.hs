@@ -243,7 +243,7 @@ sourceEntry s sink = do
   mdesc <- M.lookup s <$> getEntries
   case mdesc of
     Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> liftIO' . runResourceT $ I.sourceEntry path desc $$ sink
+    Just desc -> liftIO' . runResourceT $ I.sourceEntry path desc True $$ sink
 
 -- | Save specific archive entry as a file in the file system.
 --
