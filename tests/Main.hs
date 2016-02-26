@@ -32,7 +32,29 @@
 
 module Main (main) where
 
-import Test.Hspec
+-- import Test.Hspec
 
 main :: IO ()
-main = hspec undefined -- TODO
+main = return () -- TODO
+
+-- TODO We need Quick Check tests here to test some properties of
+-- 'EntrySelector'
+
+-- List of tests to write:
+
+-- Reading of zip archive (listing/inspecting) [no zip64, no unicode]
+-- Reading of zip archive [zip64]
+-- Reading of zip archive [unicode]
+-- Reading of zip archive [zip64, unicode]
+-- Decompressing of zip archive
+-- Creation, compression, decompression and comparing. Probably QuickCheck
+
+-- Do it with comments and other arbitrary settings (make Arbitrary instance
+-- for ZipArchive ()). Try with archive comments that contain end of central
+-- directory signature.
+
+-- Test reading of empty archives.
+
+-- Check ‘CopyEntry’ thing separately (?)
+
+-- Try with different compression methods
