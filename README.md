@@ -1,7 +1,5 @@
 # Zip
 
-*Work in progress.*
-
 [![License BSD3](https://img.shields.io/badge/license-BSD3-brightgreen.svg)](http://opensource.org/licenses/BSD-3-Clause)
 [![Hackage](https://img.shields.io/hackage/v/zip.svg?style=flat)](https://hackage.haskell.org/package/zip)
 [![Stackage Nightly](http://stackage.org/package/zip/badge/nightly)](http://stackage.org/nightly/package/zip)
@@ -44,12 +42,12 @@ package.
 `zip-archive` is a widely used library. It's quite old, well-known and
 simple to use. However it creates Zip archives purely, as `ByteStrings`s in
 memory that you can then write to the file system. This is not acceptable if
-you work with more-or-less large data. For example, if you have collection
-of files with total size of 500 MB and you want to pack them into an
-archive, you can easily consume up to 1 GB of memory (files plus resulting
-archive). Not always you can afford to do this or do this at scale. Good
-news is that Haskell now has mature libraries for stream processing that can
-be used to do the same thing in constant memory. More about this below.
+you work with more-or-less big data. For example, if you have collection of
+files with total size of 500 MB and you want to pack them into an archive,
+you can easily consume up to 1 GB of memory (files plus resulting
+archive). Not always you can afford to do this or do this at scale. Even if
+you want just to look at list of archive entries it will read it into memory
+in all its entirety. For my use-case it's not acceptable.
 
 ### LibZip
 
@@ -76,16 +74,17 @@ server.
 
 After much frustration with all these things I decided to avoid using of
 `LibZip`, because after all, this is not that sort of project that shouldn't
-be done in pure Haskell.
+be done in pure Haskell. By rewriting this in Haskell, I also can make it
+safer to use.
 
 ### zip-conduit
 
 This one uses the right approach: leverage good streaming library
-(`conduit`) for memory-efficient processing in pure Haskell. This is however
-is not feature-rich and has certain problems (including programming style,
-it uses `error` if an entry is missing in archive, among other things), some
-of them are reported on its issue tracker. It also does not appear to be
-maintained (last sign of activity was on December 23, 2014).
+(`conduit`) for memory-efficient processing. This is however is not
+feature-rich and has certain problems (including programming style, it uses
+`error` if an entry is missing in archive, among other things), some of them
+are reported on its issue tracker. It also does not appear to be maintained
+(last sign of activity was on December 23, 2014).
 
 ## Features
 
@@ -113,7 +112,7 @@ Hackage at the moment.
 Encryption is currently not supported. Encryption system described in Zip
 specification is known to be seriously flawed, so it's probably not the best
 way to protect your data anyway. The encryption method seems to be
-proprietary technology of PKWARE (at least that's what stated about them in
+proprietary technology of PKWARE (at least that's what stated about it in
 the .ZIP specification), so to hell with it.
 
 ### Sources of file data
@@ -145,7 +144,7 @@ necessary when anything from this list takes place:
 
 ### Filenames
 
-The library uses API that makes it impossible to create archive with
+The library has API that makes it impossible to create archive with
 non-portable or invalid file names in it.
 
 As of .ZIP specification 6.3.2, files with Unicode symbols in their names
@@ -161,7 +160,116 @@ archive.
 
 ## Quick start
 
-*Coming soon…*
+The module `Codec.Archive.Zip` provides everything you need to manipulate
+Zip archives. There are three things that should clarified right away, to
+avoid confusion in the future.
+
+First, we use `EntrySelector` type that can be obtained from `Path Rel File`
+paths. This method may seem awkward at first, but it will protect you from
+problems with portability when your archive is unpacked on a different
+platform. Using of well-typed paths is also something you should consider
+doing in your projects anyway. Even if you don't want to use `Path` module
+in your project, it's easy to marshal `FilePath` to `Path` just before using
+functions from the library.
+
+The second thing, that is rather a consequence of the first, is that there
+is no way to add directories, or to be precise, *empty directories* to your
+archive. This approach is used in Git, and I find it quite sane.
+
+Finally, the third feature of the library is that it does not modify archive
+instantly, because doing so on every manipulation would often be
+inefficient. Instead we maintain collection of pending actions that can be
+turned into optimized procedure that efficiently modifies archive in one
+pass. Normally this should be of no concern to you, because all actions are
+performed automatically when you leave the realm of `ZipArchive` monad. If,
+however, you ever need to force update, `commit` function is your
+friend. There are even “undo” functions, by the way.
+
+Let's take a look at some examples that show how to accomplish most typical
+tasks with help of the library.
+
+To get full information about archive entries, use `getEntries`:
+
+```haskell
+withArchive archivePath (M.keys <$> getEntries)
+```
+
+This will return list of all entries in archive at `archivePath`. It's
+possible to extract contents of archive as strict `ByteString`:
+
+```haskell
+withArchive archivePath (getEntry entrySelector)
+```
+
+…to stream them to given sink:
+
+```haskell
+withArchive archivePath (sourceEntry entrySelector mySink)
+```
+
+…to save specific entry to a file:
+
+```haskell
+withArchive archivePath (saveEntry entrySelector pathToFile)
+```
+
+…and finally just unpack entire archive into some directory:
+
+```haskell
+withArchive archivePath (unpackInto destDir)
+```
+
+See also `getArchiveComment` and `getArchiveDescription`.
+
+Modifying is also easy, efficient, and extremely powerful. When you want to
+create new archive use `createArchive`, otherwise `withArchive` will do. To
+add entry from `ByteString`:
+
+```haskell
+createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
+```
+
+You can stream from `Source` as well:
+
+```haskell
+createArchive archivePath (sinkEntry Deflate source entrySelector)
+```
+
+To add contents of some file, use 'loadEntry':
+
+```haskell
+let toSelector = const $ parseRelFile "my-entry.txt" >>= mkEntrySelector
+createArchive archivePath (loadEntry BZip2 toSelector myFilePath)
+```
+
+Finally, you can copy entry from another archive without re-compression
+(unless you use `recompress`, see below):
+
+```haskell
+createArchive archivePath (copyEntry srcArchivePath selector selector)
+```
+
+It's often desirable to just pack a directory:
+
+```haskell
+let f = stripDir dir >=> mkEntrySelector
+createArchive archivePath (packDirRecur Deflate f dir)
+```
+
+It's also possible to:
+
+* rename an entry with `renameEntry`
+* delete an entry with `deleteEntry`
+* change compression method with `recompress`
+* change comment associated with an entry with `setEntryComment`
+* delete comment with `deleteEntryComment`
+* set modification time with `setModTime`
+* manipulate extra fields with `addExtraField` and `deleteExtraField`
+* undo changes with `undoEntryCanges`, `undoArchiveChanges`, and `undoAll`
+* force changes to be written to file system with `commit`
+
+This should cover all your needs. Feel free to open an issue if you're
+missing something.
 
 ## Contribution
 
