@@ -269,10 +269,12 @@ optimize = foldl' f
   where
     f (pa, ea) a = case a of
       SinkEntry m src s ->
-        ( pa { paSinkEntry   = M.insert s src (paSinkEntry pa) }
+        ( pa { paSinkEntry   = M.insert s src (paSinkEntry pa)
+             , paCopyEntry   = M.map (M.filter (/= s)) (paCopyEntry pa) }
         , ea { eaCompression = M.insert s m (eaCompression ea) } )
       CopyEntry path os ns ->
-        ( pa { paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa) }
+        ( pa { paSinkEntry = M.delete ns (paSinkEntry pa)
+             , paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa) }
         , ea )
       RenameEntry os ns ->
         ( pa { paCopyEntry = M.map (M.map $ re os ns) (paCopyEntry pa)
