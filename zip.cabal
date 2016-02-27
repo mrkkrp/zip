@@ -66,7 +66,7 @@ library
                     , mtl              >= 2.0
                     , path             >= 0.5
                     , path-io          >= 1.0.1
-                    , plan-b           >= 0.1.1
+                    , plan-b           >= 0.2.0
                     , resourcet        >= 1.0
                     , semigroups       >= 0.5
                     , text             >= 0.2

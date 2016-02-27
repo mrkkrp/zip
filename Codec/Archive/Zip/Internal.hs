@@ -9,6 +9,8 @@
 --
 -- Low-level, non-public concepts and operations.
 
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
   , targetEntry
@@ -224,7 +226,10 @@ commit
   -> Seq PendingAction -- ^ Collection of pending actions
   -> IO ()
 commit path ArchiveDescription {..} entries xs =
-  withNewFile (overrideIfExists <> nameTemplate "zip") path $ \temp -> do
+  withNewFile (overrideIfExists      <>
+               nameTemplate ".zip"   <>
+               tempDir (parent path) <>
+               moveByRenaming) path $ \temp -> do
     let (ProducingActions coping sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
         comment = predictComment adComment xs
@@ -357,27 +362,14 @@ sinkEntry h s src EditingActions {..} = do
         , edUncompressedSize = 0 -- ↑
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment
-        , edExtraField       =
-            M.insert 1 (B.replicate 28 0x00) extraField }
-      lhSize = predictLocalHeaderLength s desc'
-  B.hPut h (B.replicate lhSize 0x00)
+        , edExtraField       = extraField }
+  B.hPut h (runPut (putLocalHeader s desc'))
   DataDescriptor {..} <- runResourceT (src $$ sinkData h compression)
   afterStreaming <- hTell h
-  let needZip64 = ddUncompressedSize >= 0xffffffff
-        || ddCompressedSize >= 0xffffffff
-        || offset >= 0xffffffff
-      zip64 = Zip64ExtraField
-        { z64efUncompressedSize = ddUncompressedSize
-        , z64efCompressedSize   = ddCompressedSize
-        , z64efOffset           = fromIntegral offset }
-      desc = desc'
+  let desc = desc'
         { edCRC32            = ddCRC32
-        , edCompressedSize   =
-            bool (z64efCompressedSize zip64) 0xffffffff needZip64
-        , edUncompressedSize =
-            bool (z64efUncompressedSize zip64) 0xffffffff needZip64
-        , edExtraField       =
-            M.insert 1 (makeZip64ExtraField zip64) extraField }
+        , edCompressedSize   = ddCompressedSize
+        , edUncompressedSize = ddUncompressedSize }
   hSeek h AbsoluteSeek offset
   B.hPut h (runPut (putLocalHeader s desc))
   hSeek h AbsoluteSeek afterStreaming
@@ -418,30 +410,20 @@ sinkEntry' h s ed src EditingActions {..} = do
         , edUncompressedSize = 0 -- ↑
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment <|> oldComment
-        , edExtraField       =
-            M.insert 1 (B.replicate 28 0x00) extraField }
-      lhSize = predictLocalHeaderLength s desc'
-  B.hPut h (B.replicate lhSize 0x00)
+        , edExtraField       = extraField }
+  B.hPut h (runPut (putLocalHeader s desc'))
   DataDescriptor {..} <- runResourceT $
     if recompression
       then src =$= decompressingPipe compressed $$ sinkData h compression
       else src $$ sinkData h Store
   afterStreaming <- hTell h
-  let needZip64 = ddUncompressedSize >= 0xffffffff
-        || ddCompressedSize >= 0xffffffff
-        || offset >= 0xffffffff
-      zip64 = Zip64ExtraField
-        { z64efUncompressedSize =
-            bool (edUncompressedSize ed) ddUncompressedSize recompression
-        , z64efCompressedSize =
+  let desc = desc'
+        { edCRC32            =
+            bool (edCRC32 ed) ddCRC32 recompression
+        , edCompressedSize   =
             bool (edCompressedSize ed) ddCompressedSize recompression
-        , z64efOffset = fromIntegral offset }
-      desc = desc'
-        { edCRC32 = bool (edCRC32 ed) ddCRC32 recompression
-        , edCompressedSize =
-            bool (z64efCompressedSize zip64) 0xffffffff needZip64
         , edUncompressedSize =
-            bool (z64efUncompressedSize zip64) 0xffffffff needZip64 }
+            bool (edUncompressedSize ed) ddUncompressedSize recompression }
   hSeek h AbsoluteSeek offset
   B.hPut h (runPut (putLocalHeader s desc))
   hSeek h AbsoluteSeek afterStreaming
@@ -458,7 +440,7 @@ sinkData
      -- ^ 'Sink' where to stream data
 sinkData h compression = do
   let crc32Sink = CL.fold crc32Update 0
-      sizeSink  = CL.fold (\acc input -> B.length input + acc) 0
+      sizeSink  = CL.fold (\acc input -> fromIntegral (B.length input) + acc) 0
       dataSink  = fst <$> zipSinks sizeSink (CB.sinkHandle h)
       withCompression = zipSinks (zipSinks sizeSink crc32Sink)
   ((uncompressedSize, crc32), compressedSize) <-
@@ -471,8 +453,8 @@ sinkData h compression = do
         BZ.bzip2 =$= dataSink
   return DataDescriptor
     { ddCRC32            = fromIntegral crc32
-    , ddCompressedSize   = fromIntegral compressedSize
-    , ddUncompressedSize = fromIntegral uncompressedSize }
+    , ddCompressedSize   = compressedSize
+    , ddUncompressedSize = uncompressedSize }
 
 -- | Append central directory entries and end of central directory record to
 -- file that given 'Handle' is associated with. Note that this automatically
@@ -498,11 +480,7 @@ writeCD h comment m = do
     zip64ecdOffset <- hTell h
     B.hPut h . runPut $ putZip64ECD totalCount cdSize cdOffset
     B.hPut h . runPut $ putZip64ECDLocator zip64ecdOffset
-  B.hPut h . runPut $ putECD
-    (bool totalCount 0xffff     needZip64)
-    (bool cdSize     0xffffffff needZip64)
-    (bool cdOffset   0xffffffff needZip64)
-    comment
+  B.hPut h . runPut $ putECD totalCount cdSize cdOffset comment
 
 ----------------------------------------------------------------------------
 -- Binary serialization
@@ -559,16 +537,18 @@ getCDHeader = do
   offset         <- fromIntegral <$> getWord32le -- offset of local header
   fileName       <- T.unpack . T.decodeUtf8 <$>
     getBytes (fromIntegral fileNameSize) -- file name
-  extraFields    <- M.fromList <$>
+  extraField     <- M.fromList <$>
     isolate (fromIntegral extraFieldSize) (many getExtraField)
   -- ↑ extra fields in their raw form
   comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
   -- ↑ file comment
-  let mz64ef = M.lookup 1 extraFields >>= parseZip64ExtraField
-      with64opt x f =
-        case mz64ef of
-          Nothing -> x
-          Just z64ef -> bool x (f z64ef) (x == 0xffffffff)
+  let dfltZip64 = Zip64ExtraField
+        { z64efUncompressedSize = uncompressed
+        , z64efCompressedSize   = compressed
+        , z64efOffset           = offset }
+      z64ef = case M.lookup 1 extraField of
+        Nothing -> dfltZip64
+        Just b  -> parseZip64ExtraField dfltZip64 b
   case mcompression of
     Nothing -> return Nothing
     Just compression ->
@@ -578,11 +558,11 @@ getCDHeader = do
             , edCompression      = compression
             , edModified         = fromMsDosTime (MsDosTime modDate modTime)
             , edCRC32            = fromIntegral crc32
-            , edCompressedSize   = with64opt compressed   z64efCompressedSize
-            , edUncompressedSize = with64opt uncompressed z64efUncompressedSize
-            , edOffset           = with64opt offset       z64efOffset
+            , edCompressedSize   = z64efCompressedSize   z64ef
+            , edUncompressedSize = z64efUncompressedSize z64ef
+            , edOffset           = z64efOffset           z64ef
             , edComment = if commentSize == 0 then Nothing else Just comment
-            , edExtraField       = extraFields }
+            , edExtraField       = extraField }
       in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
 
 -- | Parse an extra-field.
@@ -605,22 +585,33 @@ getSignature sig = do
 
 -- | Parse 'Zip64ExtraField' from its binary representation.
 
-parseZip64ExtraField :: ByteString -> Maybe Zip64ExtraField
-parseZip64ExtraField b = either (const Nothing) Just . flip runGet b $ do
-  uncompressed <- fromIntegral <$> getWord64le -- uncompressed size
-  compressed   <- fromIntegral <$> getWord64le -- compressed size
-  offset       <- fromIntegral <$> getWord64le -- offset of local file header
-  skip 4 -- number of the disk on which this file starts
-  return (Zip64ExtraField uncompressed compressed offset)
+parseZip64ExtraField
+  :: Zip64ExtraField   -- ^ What is read from central directory file header
+  -> ByteString        -- ^ Actual binary representation
+  -> Zip64ExtraField   -- ^ Result
+parseZip64ExtraField dflt@Zip64ExtraField {..} b =
+  either (const dflt) id . flip runGet b $ do
+    let ifsat v = if v >= 0xffffffff
+          then fromIntegral <$> getWord64le
+          else return v
+    uncompressed <- ifsat z64efUncompressedSize -- uncompressed size
+    compressed   <- ifsat z64efCompressedSize -- compressed size
+    offset       <- ifsat z64efOffset -- offset of local file header
+    return (Zip64ExtraField uncompressed compressed offset)
 
--- | Produce binary representation of 'Zip64ExtraField', 28 bytes long.
+-- | Produce binary representation of 'Zip64ExtraField'.
 
-makeZip64ExtraField :: Zip64ExtraField -> ByteString
-makeZip64ExtraField Zip64ExtraField {..} = runPut $ do
-  putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
-  putWord64le (fromIntegral z64efCompressedSize) -- compressed size
-  putWord64le (fromIntegral z64efOffset) -- offset of local file header
-  putWord32le 0 -- number of the disk on which this file starts
+makeZip64ExtraField
+  :: Bool              -- ^ Is this for central directory file header?
+  -> Zip64ExtraField   -- ^ Zip64 extra field's data
+  -> ByteString        -- ^ Resulting representation
+makeZip64ExtraField c Zip64ExtraField {..} = runPut $ do
+  when (not c || z64efUncompressedSize >= 0xffffffff) $
+    putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
+  when (not c || z64efCompressedSize >= 0xffffffff) $
+    putWord64le (fromIntegral z64efCompressedSize) -- compressed size
+  when (c && z64efOffset >= 0xffffffff) $
+    putWord64le (fromIntegral z64efOffset) -- offset of local file header
 
 -- | Create 'ByteString' representing an extra field.
 
@@ -668,19 +659,24 @@ putHeader c s EntryDescription {..} = do
   putWord16le (msDosTime modTime) -- last mod file time
   putWord16le (msDosDate modTime) -- last mod file date
   putWord32le (fromIntegral edCRC32) -- CRC-32 checksum
-  putWord32le (fromIntegral edCompressedSize) -- compressed size
-  putWord32le (fromIntegral edUncompressedSize) -- uncompressed size
+  putWord32le (withSaturation edCompressedSize) -- compressed size
+  putWord32le (withSaturation edUncompressedSize) -- uncompressed size
   putWord16le (fromIntegral $ B.length rawName) -- file name length
-  putWord16le (fromIntegral $ predictExtraFieldLength edExtraField)
+  let zip64ef = makeZip64ExtraField c Zip64ExtraField
+        { z64efUncompressedSize = edUncompressedSize
+        , z64efCompressedSize   = edCompressedSize
+        , z64efOffset           = edOffset }
+      extraField = runPut . putExtraField $ M.insert 1 zip64ef edExtraField
+  putWord16le (fromIntegral $ B.length extraField)
   -- ↑ extra field length
   when c $ do
     putWord16le (fromIntegral $ B.length comment) -- file comment length
     putWord16le 0 -- disk number start
     putWord16le 0 -- internal file attributes
     putWord32le 0 -- external file attributes
-    putWord32le (fromIntegral edOffset) -- relative offset of local header
+    putWord32le (withSaturation edOffset) -- relative offset of local header
   putByteString rawName -- file name (variable size)
-  putExtraField edExtraField -- extra field (variable size)
+  putByteString extraField -- extra field (variable size)
   when c (putByteString comment) -- file comment (variable size)
 
 -- | Create 'ByteString' representing Zip64 end of central directory record.
@@ -767,10 +763,11 @@ putECD totalCount cdSize cdOffset mcomment = do
   putWord32le 0x06054b50 -- end of central dir signature
   putWord16le 0 -- number of this disk
   putWord16le 0 -- number of the disk with the start of the central directory
-  putWord16le (fromIntegral totalCount) -- total number of entries on this disk
-  putWord16le (fromIntegral totalCount) -- total number of entries
-  putWord32le (fromIntegral cdSize) -- size of central directory
-  putWord32le (fromIntegral cdOffset) -- offset of start of central directory
+  putWord16le (withSaturation totalCount)
+  -- ↑ total number of entries on this disk
+  putWord16le (withSaturation totalCount) -- total number of entries
+  putWord32le (withSaturation cdSize) -- size of central directory
+  putWord32le (withSaturation cdOffset) -- offset of start of central directory
   let comment = maybe B.empty T.encodeUtf8 mcomment
   putWord16le (fromIntegral $ B.length comment)
   putByteString comment
@@ -812,11 +809,14 @@ locateECD path h = sizeCheck
     checkCDSig pos = do
       hSeek h AbsoluteSeek (pos + 16)
       sigPos <- fromIntegral <$> getNum getWord32le 4
-      hSeek h AbsoluteSeek sigPos
-      cdSig  <- getNum getWord32le 4
-      return $ if cdSig == 0x02014b50 || cdSig == 0x06054b50
-        then Just pos
-        else Nothing
+      if sigPos == 0xffffffff -- Zip64 is probably used
+        then return (Just pos)
+        else do
+          hSeek h AbsoluteSeek sigPos
+          cdSig  <- getNum getWord32le 4
+          return $ if cdSig == 0x02014b50 || cdSig == 0x06054b50
+            then Just pos
+            else Nothing
 
     checkZip64 pos =
       if pos < 20
@@ -853,19 +853,15 @@ renameKey ok nk m = case M.lookup ok m of
   Nothing -> m
   Just e -> M.insert nk e (M.delete ok m)
 
--- | Return length of local header.
+-- | Like 'fromIntegral', but with saturation when converting to bounded
+-- types.
 
-predictLocalHeaderLength :: EntrySelector -> EntryDescription -> Int
-predictLocalHeaderLength s e = 30
-  + B.length (T.encodeUtf8 $ getEntryName s)
-  + predictExtraFieldLength (edExtraField e)
-
--- | Return number of bytes that given collection of extra fields will
--- occupy.
-
-predictExtraFieldLength :: Map Natural ByteString -> Int
-predictExtraFieldLength = M.foldl' f 0
-  where f t b = 4 + B.length b + t
+withSaturation
+  :: forall a b. (Integral a, Ord a, Integral b, Bounded b) => a -> b
+withSaturation x =
+  if x > fromIntegral (maxBound :: b)
+    then maxBound :: b
+    else fromIntegral x
 
 -- | Determine target entry of action.
 
