@@ -191,32 +191,32 @@ tasks with help of the library.
 To get full information about archive entries, use `getEntries`:
 
 ```haskell
-withArchive archivePath (M.keys <$> getEntries)
+λ> withArchive archivePath (M.keys <$> getEntries)
 ```
 
 This will return list of all entries in archive at `archivePath`. It's
 possible to extract contents of archive as strict `ByteString`:
 
 ```haskell
-withArchive archivePath (getEntry entrySelector)
+λ> withArchive archivePath (getEntry entrySelector)
 ```
 
 …to stream them to given sink:
 
 ```haskell
-withArchive archivePath (sourceEntry entrySelector mySink)
+λ> withArchive archivePath (sourceEntry entrySelector mySink)
 ```
 
 …to save specific entry to a file:
 
 ```haskell
-withArchive archivePath (saveEntry entrySelector pathToFile)
+λ> withArchive archivePath (saveEntry entrySelector pathToFile)
 ```
 
 …and finally just unpack entire archive into some directory:
 
 ```haskell
-withArchive archivePath (unpackInto destDir)
+λ> withArchive archivePath (unpackInto destDir)
 ```
 
 See also `getArchiveComment` and `getArchiveDescription`.
@@ -226,34 +226,34 @@ create new archive use `createArchive`, otherwise `withArchive` will do. To
 add entry from `ByteString`:
 
 ```haskell
-createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
+λ> createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
 ```
 
 You can stream from `Source` as well:
 
 ```haskell
-createArchive archivePath (sinkEntry Deflate source entrySelector)
+λ> createArchive archivePath (sinkEntry Deflate source entrySelector)
 ```
 
-To add contents of some file, use 'loadEntry':
+To add contents from some file, use `loadEntry`:
 
 ```haskell
-let toSelector = const $ parseRelFile "my-entry.txt" >>= mkEntrySelector
-createArchive archivePath (loadEntry BZip2 toSelector myFilePath)
+λ> let toSelector = const $ parseRelFile "my-entry.txt" >>= mkEntrySelector
+λ> createArchive archivePath (loadEntry BZip2 toSelector myFilePath)
 ```
 
 Finally, you can copy entry from another archive without re-compression
 (unless you use `recompress`, see below):
 
 ```haskell
-createArchive archivePath (copyEntry srcArchivePath selector selector)
+λ> createArchive archivePath (copyEntry srcArchivePath selector selector)
 ```
 
 It's often desirable to just pack a directory:
 
 ```haskell
-let f = stripDir dir >=> mkEntrySelector
-createArchive archivePath (packDirRecur Deflate f dir)
+λ> let f = stripDir dir >=> mkEntrySelector
+λ> createArchive archivePath (packDirRecur Deflate f dir)
 ```
 
 It's also possible to:
