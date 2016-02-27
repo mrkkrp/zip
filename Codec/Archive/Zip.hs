@@ -116,15 +116,13 @@ import qualified Data.Set                   as E
 -- archives. It's intentionally opaque and not a monad transformer to limit
 -- number of actions that can be performed in it to those provided by this
 -- module and their combinations.
---
--- Note: you cannot perform 'IO' actions in this monad, although provided
--- primitives can do it for you.
 
 newtype ZipArchive a = ZipArchive
   { unZipArchive :: StateT ZipState IO a
   } deriving ( Functor
              , Applicative
              , Monad
+             , MonadIO
              , MonadThrow
              , MonadCatch
              , MonadMask )
@@ -244,7 +242,7 @@ sourceEntry s sink = do
   mdesc <- M.lookup s <$> getEntries
   case mdesc of
     Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> liftIO' . runResourceT $ I.sourceEntry path desc True $$ sink
+    Just desc -> liftIO . runResourceT $ I.sourceEntry path desc True $$ sink
 
 -- | Save specific archive entry as a file in the file system.
 --
@@ -263,10 +261,10 @@ unpackInto :: Path b Dir -> ZipArchive ()
 unpackInto dir' = do
   selectors <- M.keysSet <$> getEntries
   unless (null selectors) $ do
-    dir <- liftIO' (makeAbsolute dir')
-    liftIO' (ensureDir dir)
+    dir <- liftIO (makeAbsolute dir')
+    liftIO (ensureDir dir)
     let dirs = E.map (parent . (dir </>) . unEntrySelector) selectors
-    forM_ dirs (liftIO' . ensureDir)
+    forM_ dirs (liftIO . ensureDir)
     forM_ selectors $ \s ->
       saveEntry s (dir </> unEntrySelector s)
 
@@ -309,9 +307,9 @@ loadEntry
   -> Path b File       -- ^ Path to file to add
   -> ZipArchive ()
 loadEntry t f path = do
-  apath   <- liftIO' (canonicalizePath path)
+  apath   <- liftIO (canonicalizePath path)
   s       <- f apath
-  modTime <- liftIO' (getModificationTime path)
+  modTime <- liftIO (getModificationTime path)
   let src = CB.sourceFile (toFilePath apath)
   addPending (I.SinkEntry t src s)
   addPending (I.SetModTime modTime s)
@@ -325,7 +323,7 @@ copyEntry
   -> EntrySelector     -- ^ Name of entry to insert (in actual archive)
   -> ZipArchive ()
 copyEntry path s' s = do
-  apath <- liftIO' (canonicalizePath path)
+  apath <- liftIO (canonicalizePath path)
   addPending (I.CopyEntry apath s' s)
 
 -- | Add entire directory to archive. Please note that due to design of the
@@ -340,7 +338,7 @@ packDirRecur
   -> Path b Dir        -- ^ Path to directory to add
   -> ZipArchive ()
 packDirRecur t f path = do
-  files <- snd <$> liftIO' (listDirRecur path)
+  files <- snd <$> liftIO (listDirRecur path)
   mapM_ (loadEntry t f) files
 
 -- | Rename entry in archive. If the entry does not exist, nothing will
@@ -449,12 +447,12 @@ commit = do
   oentries <- getEntries
   actions  <- getPending
   unless (S.null actions) $ do
-    liftIO' (I.commit file odesc oentries actions)
+    liftIO (I.commit file odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
     -- archive is to scan it again — manual manipulations with descriptions
     -- of entries are too error-prone. We also want to erase all pending
     -- actions because 'I.commit' executes them all by definition.
-    (ndesc, nentries) <- liftIO' (I.scanArchive file)
+    (ndesc, nentries) <- liftIO (I.scanArchive file)
     ZipArchive . modify $ \st -> st
       { zsEntries = nentries
       , zsArchive = ndesc
@@ -472,12 +470,6 @@ getFilePath = ZipArchive (gets zsFilePath)
 
 getPending :: ZipArchive (Seq I.PendingAction)
 getPending = ZipArchive (gets zsActions)
-
--- | We do not permit arbitrary 'IO' inside 'ZipArchive' for users of the
--- library, but we can cheat and do it ourselves.
-
-liftIO' :: IO a -> ZipArchive a
-liftIO' = ZipArchive . liftIO
 
 -- | Modify collection of pending actions in some way.
 
