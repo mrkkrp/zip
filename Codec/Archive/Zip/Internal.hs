@@ -106,6 +106,19 @@ data EditingActions = EditingActions
   , eaExtraField    :: Map EntrySelector (Map Natural ByteString)
   , eaDeleteField   :: Map EntrySelector (Map Natural ()) }
 
+-- | Origins of entries that can be streamed into archive.
+
+data EntryOrigin
+  = GenericOrigin
+  | Borrowed EntryDescription
+
+-- | Type of file header: local or central directory.
+
+data HeaderType
+  = LocalHeader
+  | CentralDirHeader
+  deriving Eq
+
 -- | Data descriptor representation.
 
 data DataDescriptor = DataDescriptor
@@ -238,7 +251,7 @@ commit path ArchiveDescription {..} entries xs =
         copyEntries h srcPath (coping ! srcPath) editing)
       let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
       sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
-        sinkEntry h selector (sinking ! selector) editing)
+        sinkEntry h selector GenericOrigin (sinking ! selector) editing)
       writeCD h comment (copiedCD `M.union` sunkCD)
 
 -- | Determine what comment in new archive will look like given its original
@@ -262,8 +275,9 @@ toRecreatingActions
 toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
   where f s e = s |> CopyEntry path e e
 
--- | Transform collection of 'PendingAction's into 'OptimizedActions' —
--- collection of data describing how to create resulting archive.
+-- | Transform collection of 'PendingAction's into 'ProducingActions' and
+-- 'EditingActions' — collection of data describing how to create resulting
+-- archive.
 
 optimize
   :: Seq PendingAction -- ^ Collection of pending actions
@@ -293,7 +307,12 @@ optimize = foldl' f
       DeleteEntry s ->
         ( pa { paSinkEntry = M.delete s (paSinkEntry pa)
              , paCopyEntry = M.map (M.delete s) (paCopyEntry pa) }
-        , ea )
+        , ea { eaCompression   = M.delete s (eaCompression ea)
+             , eaEntryComment  = M.delete s (eaEntryComment ea)
+             , eaDeleteComment = M.delete s (eaDeleteComment ea)
+             , eaModTime       = M.delete s (eaModTime ea)
+             , eaExtraField    = M.delete s (eaExtraField ea)
+             , eaDeleteField   = M.delete s (eaDeleteField ea) } )
       Recompress m s ->
         (pa, ea { eaCompression = M.insert s m (eaCompression ea) })
       SetEntryComment txt s ->
@@ -335,7 +354,8 @@ copyEntries h path m e = do
   done    <- forM (M.keys m) $ \s ->
     case s `M.lookup` entries of
       Nothing -> throwM (EntryDoesNotExist path s)
-      Just desc -> sinkEntry' h (m ! s) desc (sourceEntry path desc False) e
+      Just desc -> sinkEntry h (m ! s) (Borrowed desc)
+        (sourceEntry path desc False) e
   return (M.fromList done)
 
 -- | Sink entry from given stream into file associated with given 'Handle'.
@@ -343,64 +363,30 @@ copyEntries h path m e = do
 sinkEntry
   :: Handle            -- ^ Opened 'Handle' of zip archive file
   -> EntrySelector     -- ^ Name of entry to add
+  -> EntryOrigin       -- ^ Origin of entry (can contain additional info)
   -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
   -> EditingActions    -- ^ Additional info that can influence result
   -> IO (EntrySelector, EntryDescription)
      -- ^ Info to generate central directory file headers later
-sinkEntry h s src EditingActions {..} = do
+sinkEntry h s o src EditingActions {..} = do
   modTime <- getCurrentTime
   offset  <- hTell h
-  let compression = M.findWithDefault Store s eaCompression
-      extraField  = M.findWithDefault M.empty s eaExtraField
-      desc' = EntryDescription -- to write in local header
-        { edVersionMadeBy    = zipVersion
-        , edVersionNeeded    = zipVersion
-        , edCompression      = compression
-        , edModified         = M.findWithDefault modTime s eaModTime
-        , edCRC32            = 0 -- to be overwritten after streaming
-        , edCompressedSize   = 0 -- ↑
-        , edUncompressedSize = 0 -- ↑
-        , edOffset           = fromIntegral offset
-        , edComment          = M.lookup s eaEntryComment
-        , edExtraField       = extraField }
-  B.hPut h (runPut (putLocalHeader s desc'))
-  DataDescriptor {..} <- runResourceT (src $$ sinkData h compression)
-  afterStreaming <- hTell h
-  let desc = desc'
-        { edCRC32            = ddCRC32
-        , edCompressedSize   = ddCompressedSize
-        , edUncompressedSize = ddUncompressedSize }
-  hSeek h AbsoluteSeek offset
-  B.hPut h (runPut (putLocalHeader s desc))
-  hSeek h AbsoluteSeek afterStreaming
-  return (s, desc)
-
--- | Just like 'sinkEntry', but takes existing 'EntryDecsription'. This is
--- to be used when copying entries from another archive. Although this could
--- be implemented in 'sinkEntry', I found resulting code too difficult to
--- understand (and thus maintain), so here we go.
-
-sinkEntry'
-  :: Handle            -- ^ Opened 'Handle' of zip archive file
-  -> EntrySelector     -- ^ Name of entry to add
-  -> EntryDescription  -- ^ Entry description
-  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
-  -> EditingActions    -- ^ Additional info that can influence result
-  -> IO (EntrySelector, EntryDescription)
-     -- ^ Info to generate central directory file headers later
-sinkEntry' h s ed src EditingActions {..} = do
-  modTime <- getCurrentTime
-  offset  <- hTell h
-  let compressed    = edCompression ed
-      compression   = M.findWithDefault compressed s eaCompression
+  let compressed = case o of
+        GenericOrigin -> Store
+        Borrowed ed -> edCompression ed
+      compression = M.findWithDefault compressed s eaCompression
       recompression = compression /= compressed
-      extraField    =
-        (M.findWithDefault M.empty s eaExtraField `M.union` edExtraField ed)
+      oldExtraFields = case o of
+        GenericOrigin -> M.empty
+        Borrowed ed -> edExtraField ed
+      extraField  =
+        (M.findWithDefault M.empty s eaExtraField `M.union` oldExtraFields)
         `M.difference` M.findWithDefault M.empty s eaDeleteField
-      oldComment    = case M.lookup s eaDeleteComment of
-        Nothing -> edComment ed
-        Just () -> Nothing
-      desc' = EntryDescription
+      oldComment = case (o, M.lookup s eaDeleteComment) of
+        (GenericOrigin, _)     -> Nothing
+        (Borrowed ed, Nothing) -> edComment ed
+        (Borrowed _,  Just ()) -> Nothing
+      desc' = EntryDescription -- to write in local header
         { edVersionMadeBy    = zipVersion
         , edVersionNeeded    = zipVersion
         , edCompression      = compression
@@ -411,21 +397,29 @@ sinkEntry' h s ed src EditingActions {..} = do
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment <|> oldComment
         , edExtraField       = extraField }
-  B.hPut h (runPut (putLocalHeader s desc'))
+  B.hPut h (runPut (putHeader LocalHeader s desc'))
   DataDescriptor {..} <- runResourceT $
     if recompression
-      then src =$= decompressingPipe compressed $$ sinkData h compression
+      then
+        if compressed == Store
+          then src $$ sinkData h compression
+          else src =$= decompressingPipe compressed $$ sinkData h compression
       else src $$ sinkData h Store
   afterStreaming <- hTell h
-  let desc = desc'
-        { edCRC32            =
-            bool (edCRC32 ed) ddCRC32 recompression
-        , edCompressedSize   =
-            bool (edCompressedSize ed) ddCompressedSize recompression
-        , edUncompressedSize =
-            bool (edUncompressedSize ed) ddUncompressedSize recompression }
+  let desc = case o of
+        GenericOrigin -> desc'
+          { edCRC32            = ddCRC32
+          , edCompressedSize   = ddCompressedSize
+          , edUncompressedSize = ddUncompressedSize }
+        Borrowed ed -> desc'
+          { edCRC32            =
+              bool (edCRC32 ed) ddCRC32 recompression
+          , edCompressedSize   =
+              bool (edCompressedSize ed) ddCompressedSize recompression
+          , edUncompressedSize =
+              bool (edUncompressedSize ed) ddUncompressedSize recompression }
   hSeek h AbsoluteSeek offset
-  B.hPut h (runPut (putLocalHeader s desc))
+  B.hPut h (runPut (putHeader LocalHeader s desc))
   hSeek h AbsoluteSeek afterStreaming
   return (s, desc)
 
@@ -502,11 +496,6 @@ getLocalHeaderGap = do
   fileNameSize   <- fromIntegral <$> getWord16le -- file name length
   extraFieldSize <- fromIntegral <$> getWord16le -- extra field length
   return (fileNameSize + extraFieldSize)
-
--- | Create 'ByteString' representing local file header.
-
-putLocalHeader :: EntrySelector -> EntryDescription -> Put
-putLocalHeader = putHeader False
 
 -- | Parse central directory file headers and put them into 'Map'.
 
@@ -602,15 +591,15 @@ parseZip64ExtraField dflt@Zip64ExtraField {..} b =
 -- | Produce binary representation of 'Zip64ExtraField'.
 
 makeZip64ExtraField
-  :: Bool              -- ^ Is this for central directory file header?
+  :: HeaderType        -- ^ Is this for local or central directory header?
   -> Zip64ExtraField   -- ^ Zip64 extra field's data
   -> ByteString        -- ^ Resulting representation
 makeZip64ExtraField c Zip64ExtraField {..} = runPut $ do
-  when (not c || z64efUncompressedSize >= 0xffffffff) $
+  when (c == LocalHeader || z64efUncompressedSize >= 0xffffffff) $
     putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
-  when (not c || z64efCompressedSize >= 0xffffffff) $
+  when (c == LocalHeader || z64efCompressedSize >= 0xffffffff) $
     putWord64le (fromIntegral z64efCompressedSize) -- compressed size
-  when (c && z64efOffset >= 0xffffffff) $
+  when (c == CentralDirHeader && z64efOffset >= 0xffffffff) $
     putWord64le (fromIntegral z64efOffset) -- offset of local file header
 
 -- | Create 'ByteString' representing an extra field.
@@ -626,22 +615,18 @@ putExtraField m = forM_ (M.keys m) $ \headerId -> do
 
 putCD :: Map EntrySelector EntryDescription -> Put
 putCD m = forM_ (M.keys m) $ \s ->
-  putCDHeader s (m ! s)
-
--- | Create 'ByteString' representing central directory file header.
-
-putCDHeader :: EntrySelector -> EntryDescription -> Put
-putCDHeader = putHeader True
+  putHeader CentralDirHeader s (m ! s)
 
 -- | Create 'ByteString' representing local file header if the first
 -- argument is 'False' and central directory file header otherwise.
 
 putHeader
-  :: Bool              -- ^ Generate central directory file header
+  :: HeaderType        -- ^ Type of header to generate
   -> EntrySelector     -- ^ Name of entry to write
   -> EntryDescription  -- ^ Description of entry
   -> Put
-putHeader c s EntryDescription {..} = do
+putHeader c' s EntryDescription {..} = do
+  let c = c' == CentralDirHeader
   putWord32le (bool 0x04034b50 0x02014b50 c)
   -- ↑ local/central file header signature
   when c $
@@ -662,7 +647,7 @@ putHeader c s EntryDescription {..} = do
   putWord32le (withSaturation edCompressedSize) -- compressed size
   putWord32le (withSaturation edUncompressedSize) -- uncompressed size
   putWord16le (fromIntegral $ B.length rawName) -- file name length
-  let zip64ef = makeZip64ExtraField c Zip64ExtraField
+  let zip64ef = makeZip64ExtraField c' Zip64ExtraField
         { z64efUncompressedSize = edUncompressedSize
         , z64efCompressedSize   = edCompressedSize
         , z64efOffset           = edOffset }
