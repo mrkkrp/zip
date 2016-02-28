@@ -136,11 +136,11 @@ how to get extracted data. The following methods are supported:
 When necessary, the `ZIP64` extension is automatically enabled. It's
 necessary when anything from this list takes place:
 
-* Total size of archive is larger than 4 GB.
+* Total size of archive is greater than 4 GB.
 
 * Size of compressed/uncompressed file in archive is greater than 4 GB.
 
-* There are more than 65535 entries in the archive.
+* There are more than 65535 entries in archive.
 
 ### Filenames
 
@@ -149,7 +149,8 @@ non-portable or invalid file names in it.
 
 As of .ZIP specification 6.3.2, files with Unicode symbols in their names
 can be put into Zip archives. The library supports mechanisms for this and
-uses them automatically when needed.
+uses them automatically when needed. Besides UTF-8, CP437 is also supported
+as it's required in the specification.
 
 ### Meta-information about files
 
@@ -221,9 +222,9 @@ possible to extract contents of archive as strict `ByteString`:
 
 See also `getArchiveComment` and `getArchiveDescription`.
 
-Modifying is also easy, efficient, and extremely powerful. When you want to
-create new archive use `createArchive`, otherwise `withArchive` will do. To
-add entry from `ByteString`:
+Modifying is also easy, efficient, and powerful. When you want to create new
+archive use `createArchive`, otherwise `withArchive` will do. To add entry
+from `ByteString`:
 
 ```haskell
 λ> createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
@@ -273,7 +274,7 @@ missing something.
 
 ## Contribution
 
-Feel free to contact the maintainer via
+You can contact the maintainer via
 [the issue tracker](https://github.com/mrkkrp/zip/issues).
 
 We are open to pull requests, they will be merged quickly if they are good!
