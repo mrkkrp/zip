@@ -19,6 +19,7 @@ module Codec.Archive.Zip.Internal
   , commit )
 where
 
+import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
 import Control.Applicative (many, (<|>))
 import Control.Monad
@@ -513,6 +514,7 @@ getCDHeader = do
   bitFlag        <- getWord16le -- general purpose bit flag
   when (any (testBit bitFlag) [0,6,13]) $
     fail "Encrypted archives are not supported"
+  let needUnicode = testBit bitFlag 11
   mcompression   <- toCompressionMethod <$> getWord16le -- compression method
   modTime        <- getWord16le -- last mod file time
   modDate        <- getWord16le -- last mod file date
@@ -524,12 +526,12 @@ getCDHeader = do
   commentSize    <- getWord16le -- file comment size
   skip 8 -- disk number start, internal/external file attributes
   offset         <- fromIntegral <$> getWord32le -- offset of local header
-  fileName       <- T.unpack . T.decodeUtf8 <$>
+  fileName       <- decodeText needUnicode <$>
     getBytes (fromIntegral fileNameSize) -- file name
   extraField     <- M.fromList <$>
     isolate (fromIntegral extraFieldSize) (many getExtraField)
   -- ↑ extra fields in their raw form
-  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
+  comment <- decodeText needUnicode <$> getBytes (fromIntegral commentSize)
   -- ↑ file comment
   let dfltZip64 = Zip64ExtraField
         { z64efUncompressedSize = uncompressed
@@ -550,9 +552,10 @@ getCDHeader = do
             , edCompressedSize   = z64efCompressedSize   z64ef
             , edUncompressedSize = z64efUncompressedSize z64ef
             , edOffset           = z64efOffset           z64ef
-            , edComment = if commentSize == 0 then Nothing else Just comment
+            , edComment = if commentSize == 0 then Nothing else comment
             , edExtraField       = extraField }
-      in return $ (,desc) <$> (parseRelFile fileName >>= mkEntrySelector)
+      in return $ (,desc) <$>
+         (fileName >>= parseRelFile . T.unpack >>= mkEntrySelector)
 
 -- | Parse an extra-field.
 
@@ -729,10 +732,10 @@ getECD = do
   -- disk number
   when zip64 . skip . fromIntegral $ fromJust zip64size - 4 -- obviously
   commentSize <- getWord16le -- .ZIP file comment length
-  comment <- T.decodeUtf8 <$> getBytes (fromIntegral commentSize)
-  -- ↑ .ZIP file comment
+  comment <- decodeText True <$> getBytes (fromIntegral commentSize)
+  -- ↑ archive comment, it's uncertain how we should decide on encoding here
   return ArchiveDescription
-    { adComment  = if commentSize == 0 then Nothing else Just comment
+    { adComment  = if commentSize == 0 then Nothing else comment
     , adCDOffset = fromIntegral cdOffset
     , adCDSize   = fromIntegral cdSize }
 
@@ -863,6 +866,19 @@ targetEntry (AddExtraField  _ _ s) = Just s
 targetEntry (DeleteExtraField _ s) = Just s
 targetEntry (SetArchiveComment  _) = Nothing
 targetEntry DeleteArchiveComment   = Nothing
+
+-- | Decode 'ByteString'. The first argument indicates whether we should
+-- treat it as UTF-8 (in case bit 11 of general-purpose bit flag is set),
+-- otherwise the function assumes CP437. Note that since not every stream of
+-- bytes constitute valid UTF-8 text, this function can fail. In that case
+-- 'Nothing' is returned.
+
+decodeText
+  :: Bool           -- ^ Whether bit 11 of general-purpose bit flag is set
+  -> ByteString     -- ^ Binary data to decode
+  -> Maybe Text     -- ^ Decoded 'Text' in case of success
+decodeText False = Just . decodeCP437
+decodeText True  = either (const Nothing) Just . T.decodeUtf8'
 
 -- | Detect if the given text needs newer Unicode-aware features to be
 -- properly encoded in archive.

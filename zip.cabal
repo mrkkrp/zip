@@ -75,6 +75,7 @@ library
   default-extensions: RecordWildCards
                     , TupleSections
   exposed-modules:    Codec.Archive.Zip
+                    , Codec.Archive.Zip.CP437
                     , Codec.Archive.Zip.Type
   other-modules:      Codec.Archive.Zip.Internal
   if flag(dev)
