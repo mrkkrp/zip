@@ -7,10 +7,9 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- The module provides everything you need to manipulate Zip archives. The
--- library covers all functionality that may be of interest of most users,
--- however, there are three things that should clarified right away, to
--- avoid confusion in the future.
+-- The module provides everything you need to manipulate Zip archives. There
+-- are three things that should clarified right away, to avoid confusion in
+-- the future.
 --
 -- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
 -- 'File' paths. This method may seem awkward at first, but it will protect
