@@ -41,11 +41,14 @@ import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 import Data.Version (Version)
+import Data.Word (Word16, Word32)
 import Numeric.Natural
 import Path
+import qualified Data.ByteString         as B
 import qualified Data.CaseInsensitive    as CI
 import qualified Data.List.NonEmpty      as NE
 import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
 import qualified System.FilePath         as FP
 import qualified System.FilePath.Posix   as Posix
 import qualified System.FilePath.Windows as Windows
@@ -84,6 +87,8 @@ instance Show EntrySelector where
 --
 --     * 'System.FilePath.Posix.isValid'
 --     * 'System.FilePath.Windows.isValid'
+--     * binary representation of normalized path should be not longer than
+--       65535 bytes
 --
 -- This function can throw 'EntrySelectorException' exception.
 
@@ -93,8 +98,13 @@ mkEntrySelector path =
       g x          = if null x then Nothing else Just (CI.mk x)
       preparePiece = g . filter (not . FP.isPathSeparator)
       pieces       = mapMaybe preparePiece (FP.splitPath fp)
-  in if Posix.isValid fp && Windows.isValid fp && not (null pieces)
-       then (return . EntrySelector . NE.fromList) pieces
+      selector     = EntrySelector (NE.fromList pieces)
+      binLength    = B.length . T.encodeUtf8 . getEntryName
+  in if Posix.isValid fp   &&
+        Windows.isValid fp &&
+        not (null pieces)  &&
+        binLength selector <= 0xffff
+       then return selector
        else throwM (InvalidEntrySelector path)
 
 -- | Make a relative path from 'EntrySelector'. Every 'EntrySelector'
@@ -145,12 +155,12 @@ data EntryDescription = EntryDescription
   , edVersionNeeded    :: Version -- ^ Version needed to extract
   , edCompression      :: CompressionMethod -- ^ Compression method
   , edModified         :: UTCTime -- ^ Last modification date and time
-  , edCRC32            :: Natural -- ^ CRC32 check sum
+  , edCRC32            :: Word32  -- ^ CRC32 check sum
   , edCompressedSize   :: Natural -- ^ Size of compressed entry
   , edUncompressedSize :: Natural -- ^ Size of uncompressed entry
   , edOffset           :: Natural -- ^ Absolute offset of local file header
   , edComment          :: Maybe Text -- ^ Entry comment
-  , edExtraField       :: Map Natural ByteString -- ^ All extra fields found
+  , edExtraField       :: Map Word16 ByteString -- ^ All extra fields found
   } deriving (Eq)
 
 -- | Supported compression methods.

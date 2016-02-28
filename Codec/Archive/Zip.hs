@@ -100,7 +100,7 @@ import Data.Map.Strict (Map)
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
-import Numeric.Natural
+import Data.Word (Word16)
 import Path
 import Path.IO
 import qualified Codec.Archive.Zip.Internal as I
@@ -365,7 +365,9 @@ recompress
   -> ZipArchive ()
 recompress t s = addPending (I.Recompress t s)
 
--- | Set entry comment, if that entry does not exist, nothing will happen.
+-- | Set entry comment, if that entry does not exist, nothing will
+-- happen. Note that if binary representation of comment is longer than
+-- 65535 bytes, it will be truncated on writing.
 
 setEntryComment
   :: Text              -- ^ Text of the comment
@@ -392,7 +394,7 @@ setModTime time s = addPending (I.SetModTime time s)
 -- action has no effect.
 
 addExtraField
-  :: Natural           -- ^ Extra field to add
+  :: Word16            -- ^ Tag (header id) of extra field to add
   -> ByteString        -- ^ Body of the field
   -> EntrySelector     -- ^ Name of entry to modify
   -> ZipArchive ()
@@ -402,7 +404,7 @@ addExtraField n b s = addPending (I.AddExtraField n b s)
 -- missing, in that case this action has no effect.
 
 deleteExtraField
-  :: Natural           -- ^ Type of extra field to delete
+  :: Word16            -- ^ Tag (header id) of extra field to delete
   -> EntrySelector     -- ^ Name of entry to modify
   -> ZipArchive ()
 deleteExtraField n s = addPending (I.DeleteExtraField n s)

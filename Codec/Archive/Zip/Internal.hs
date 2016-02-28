@@ -79,9 +79,9 @@ data PendingAction
     -- ^ Delete comment of particular entry
   | SetModTime UTCTime EntrySelector
     -- ^ Set modification time of particular entry
-  | AddExtraField Natural ByteString EntrySelector
+  | AddExtraField Word16 ByteString EntrySelector
     -- ^ Add an extra field to specified entry
-  | DeleteExtraField Natural EntrySelector
+  | DeleteExtraField Word16 EntrySelector
     -- ^ Delete an extra filed of specified entry
   | SetArchiveComment Text
     -- ^ Set comment for entire archive
@@ -103,8 +103,8 @@ data EditingActions = EditingActions
   , eaEntryComment  :: Map EntrySelector Text
   , eaDeleteComment :: Map EntrySelector ()
   , eaModTime       :: Map EntrySelector UTCTime
-  , eaExtraField    :: Map EntrySelector (Map Natural ByteString)
-  , eaDeleteField   :: Map EntrySelector (Map Natural ()) }
+  , eaExtraField    :: Map EntrySelector (Map Word16 ByteString)
+  , eaDeleteField   :: Map EntrySelector (Map Word16 ()) }
 
 -- | Origins of entries that can be streamed into archive.
 
@@ -122,7 +122,7 @@ data HeaderType
 -- | Data descriptor representation.
 
 data DataDescriptor = DataDescriptor
-  { ddCRC32            :: Natural
+  { ddCRC32            :: Word32
   , ddCompressedSize   :: Natural
   , ddUncompressedSize :: Natural }
 
@@ -546,7 +546,7 @@ getCDHeader = do
             , edVersionNeeded    = versionNeeded
             , edCompression      = compression
             , edModified         = fromMsDosTime (MsDosTime modDate modTime)
-            , edCRC32            = fromIntegral crc32
+            , edCRC32            = crc32
             , edCompressedSize   = z64efCompressedSize   z64ef
             , edUncompressedSize = z64efUncompressedSize z64ef
             , edOffset           = z64efOffset           z64ef
@@ -556,12 +556,12 @@ getCDHeader = do
 
 -- | Parse an extra-field.
 
-getExtraField :: Get (Natural, ByteString)
+getExtraField :: Get (Word16, ByteString)
 getExtraField = do
   header <- getWord16le -- header id
   size   <- getWord16le -- data size
   body   <- getBytes (fromIntegral size) -- content
-  return (fromIntegral header, body)
+  return (header, body)
 
 -- | Get signature. If extracted data is not equal to provided signature,
 -- fail.
@@ -604,10 +604,10 @@ makeZip64ExtraField c Zip64ExtraField {..} = runPut $ do
 
 -- | Create 'ByteString' representing an extra field.
 
-putExtraField :: Map Natural ByteString -> Put
+putExtraField :: Map Word16 ByteString -> Put
 putExtraField m = forM_ (M.keys m) $ \headerId -> do
-  let b = m ! headerId
-  putWord16le (fromIntegral headerId)
+  let b = B.take 0xffff (m ! headerId)
+  putWord16le headerId
   putWord16le (fromIntegral $ B.length b)
   putByteString b
 
@@ -634,7 +634,7 @@ putHeader c' s EntryDescription {..} = do
   putWord16le (fromVersion edVersionNeeded) -- version needed to extract
   let entryName = getEntryName s
       rawName   = T.encodeUtf8 entryName
-      comment   = maybe B.empty T.encodeUtf8 edComment
+      comment   = B.take 0xffff (maybe B.empty T.encodeUtf8 edComment)
       unicode   = needsUnicode entryName
         || maybe False needsUnicode edComment
       modTime   = toMsDosTime edModified
@@ -643,7 +643,7 @@ putHeader c' s EntryDescription {..} = do
   putWord16le (fromCompressionMethod edCompression) -- compression method
   putWord16le (msDosTime modTime) -- last mod file time
   putWord16le (msDosDate modTime) -- last mod file date
-  putWord32le (fromIntegral edCRC32) -- CRC-32 checksum
+  putWord32le edCRC32 -- CRC-32 checksum
   putWord32le (withSaturation edCompressedSize) -- compressed size
   putWord32le (withSaturation edUncompressedSize) -- uncompressed size
   putWord16le (fromIntegral $ B.length rawName) -- file name length
@@ -651,9 +651,9 @@ putHeader c' s EntryDescription {..} = do
         { z64efUncompressedSize = edUncompressedSize
         , z64efCompressedSize   = edCompressedSize
         , z64efOffset           = edOffset }
-      extraField = runPut . putExtraField $ M.insert 1 zip64ef edExtraField
-  putWord16le (fromIntegral $ B.length extraField)
-  -- ↑ extra field length
+      extraField = B.take 0xffff . runPut . putExtraField $
+        M.insert 1 zip64ef edExtraField
+  putWord16le (fromIntegral $ B.length extraField) -- extra field length
   when c $ do
     putWord16le (fromIntegral $ B.length comment) -- file comment length
     putWord16le 0 -- disk number start
