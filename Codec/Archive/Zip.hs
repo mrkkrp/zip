@@ -205,10 +205,6 @@ withArchive path m = do
 
 -- | Retrieve description of all archive entries. This is an efficient
 -- operation that can be used for example to list all entries in archive.
---
--- For example, this will return list of all entries in an archive:
---
--- > withArchive archivePath (M.keys <$> getEntries)
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
@@ -220,10 +216,8 @@ getEntries = ZipArchive (gets zsEntries)
 -- Throws: 'EntryDoesNotExist'.
 
 getEntry
-  :: EntrySelector
-     -- ^ Selector that identifies archive entry
-  -> ZipArchive ByteString
-     -- ^ Contents of the entry (if found)
+  :: EntrySelector     -- ^ Selector that identifies archive entry
+  -> ZipArchive ByteString -- ^ Contents of the entry
 getEntry s = sourceEntry s (CL.foldMap id)
 
 -- | Stream contents of archive entry to specified 'Sink'.
