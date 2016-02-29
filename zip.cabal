@@ -40,9 +40,9 @@ maintainer:           Mark Karpov <markkarpov@opmbx.org>
 homepage:             https://github.com/mrkkrp/zip
 bug-reports:          https://github.com/mrkkrp/zip/issues
 category:             Codec
-synopsis:             Manipulating zip archives
+synopsis:             Operations on zip archives
 build-type:           Simple
-description:          Manipulating zip archives.
+description:          Operations on zip archives.
 extra-source-files:   CHANGELOG.md
                     , README.md
 
