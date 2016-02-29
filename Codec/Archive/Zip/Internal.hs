@@ -885,7 +885,7 @@ decodeText True  = either (const Nothing) Just . T.decodeUtf8'
 
 needsUnicode :: Text -> Bool
 needsUnicode = not . T.all validCP437
-  where validCP437 x = let y = ord x in y >= 32 && y <= 126
+  where validCP437 x = ord x <= 127
 
 -- | Convert numeric representation (as per .ZIP specification) of version
 -- into 'Version'.
