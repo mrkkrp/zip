@@ -30,12 +30,116 @@
 -- ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 -- POSSIBILITY OF SUCH DAMAGE.
 
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS -fno-warn-orphans  #-}
+
 module Main (main) where
 
--- import Test.Hspec
+import Codec.Archive.Zip
+import Codec.Archive.Zip.CP437
+import Data.ByteString (ByteString)
+import Data.List (intercalate)
+import Data.Map (Map)
+import Data.Monoid
+import Path
+import Test.Hspec
+import Test.QuickCheck
+import qualified Data.ByteString.Lazy    as LB
+import qualified Data.ByteString.Builder as LB
+import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
+import qualified System.FilePath.Windows as Windows
+
+-- | Zip tests. Please note that Zip64 feature is not currently tested
+-- automatically because for it to expose itself we need > 4GB of
+-- data. Handling such quantities of data locally is problematic and even
+-- more problematic in the context of CI server.
 
 main :: IO ()
-main = return () -- TODO
+main = hspec $ do
+  describe "mkEntrySelector" mkEntrySelectorSpec
+  describe "unEntrySelector" unEntrySelectorSpec
+  describe "getEntryName"    getEntryNameSpec
+  describe "decodeCP437"     decodeCP437Spec
+
+----------------------------------------------------------------------------
+-- Arbitrary instances and generators
+
+instance Arbitrary (Path Rel File) where
+  arbitrary = do
+    x <- intercalate "/" <$> listOf1 (listOf1 charGen)
+    case parseRelFile x of
+      Nothing -> arbitrary
+      Just path -> return path
+
+instance Arbitrary EntrySelector where
+  arbitrary = do
+    x <- arbitrary
+    case mkEntrySelector x of
+      Nothing -> arbitrary
+      Just s  -> return s
+
+instance Arbitrary (ZipArchive (), Map EntrySelector EntryDescription) where
+  arbitrary = undefined
+
+instance Arbitrary (ZipArchive (), ArchiveDescription) where
+  arbitrary = undefined
+
+charGen :: Gen Char
+charGen = frequency
+  [ (3, choose ('a', 'z'))
+  , (3, choose ('A', 'Z'))
+  , (3, choose ('0', '9'))
+  , (1, arbitrary) ]
+
+binASCII :: Gen ByteString
+binASCII = LB.toStrict . LB.toLazyByteString <$> go
+  where go = frequency
+          [ (10, (<>) <$> (LB.word8 <$> choose (0, 127)) <*> go)
+          , (1,  return mempty) ]
+
+----------------------------------------------------------------------------
+-- Pure operations and periphery
+
+mkEntrySelectorSpec :: Spec
+mkEntrySelectorSpec = do
+  context "when incorrect Windows paths are passed" $
+    it "rejects them" $ property $ \path ->
+      (not . Windows.isValid . toFilePath $ path)
+        ==> mkEntrySelector path === Nothing
+  context "when too long paths are passed" $
+    it "rejects them" $ do
+      path <- parseRelFile (replicate 0x10000 'a')
+      mkEntrySelector path `shouldThrow` isEntrySelectorException path
+  context "when correct paths are passed" $
+    it "adequately represents them" $ do
+      let c str = do
+            s <- parseRelFile str >>= mkEntrySelector
+            getEntryName s `shouldBe` T.pack str
+      c "one/two/three"
+      c "something.txt"
+
+unEntrySelectorSpec :: Spec
+unEntrySelectorSpec =
+  context "when entry selector exists" $
+    it "has corresponding path" $ property $ \s ->
+      not . null . toFilePath . unEntrySelector $ s
+
+getEntryNameSpec :: Spec
+getEntryNameSpec =
+  context "when entry selector exists" $
+    it "has corresponding representation" $ property $ \s ->
+      not . T.null . getEntryName $ s
+
+decodeCP437Spec :: Spec
+decodeCP437Spec =
+  context "when ASCII-compatible subset is used" $
+    it "has the same result as decoding UTF-8" $ property $
+      forAll binASCII $ \bin ->
+        decodeCP437 bin `shouldBe` T.decodeUtf8 bin
+
+----------------------------------------------------------------------------
+-- Manipulations on archives
 
 -- TODO We need Quick Check tests here to test some properties of
 -- 'EntrySelector'
@@ -58,3 +162,20 @@ main = return () -- TODO
 -- Check ‘CopyEntry’ thing separately (?)
 
 -- Try with different compression methods
+
+----------------------------------------------------------------------------
+-- Helpers
+
+-- | Check whether given exception is 'EntrySelectorException' with specific
+-- path inside.
+
+isEntrySelectorException :: Path Rel File -> EntrySelectorException -> Bool
+isEntrySelectorException path (InvalidEntrySelector p) = p == path
+
+-- | Create sandbox directory to model some situation in it and run some
+-- tests. Note that we're using new unique sandbox directory for each test
+-- case to avoid contamination and it's unconditionally deleted after test
+-- case finishes.
+
+-- withSandbox :: ActionWith (Path Abs Dir) -> IO ()
+-- withSandbox = withSystemTempDir "zip-sandbox"
