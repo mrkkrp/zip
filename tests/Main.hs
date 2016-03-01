@@ -41,18 +41,22 @@ import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
+import Data.Bits (complement)
+import Data.Conduit (yield)
 import Data.List (intercalate)
-import Data.Map (Map)
+import Data.Map (Map, (!))
 import Data.Monoid
 import Data.Text (Text)
 import Path
 import Path.IO
+import System.IO
 import System.IO.Error (isDoesNotExistError)
 import Test.Hspec
 import Test.QuickCheck
 import qualified Data.ByteString         as B
 import qualified Data.ByteString.Builder as LB
 import qualified Data.ByteString.Lazy    as LB
+import qualified Data.Conduit.List       as CL
 import qualified Data.Map                as M
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
@@ -70,15 +74,27 @@ main = hspec $ do
   describe "getEntryName"    getEntryNameSpec
   describe "decodeCP437"     decodeCP437Spec
   around withSandbox $ do
-    describe "createArchive" createArchiveSpec
-    describe "withArchive"   withArchiveSpec
-    describe "archive comment" archiveCommentSpec
+    describe "createArchive"      createArchiveSpec
+    describe "withArchive"        withArchiveSpec
+    describe "archive comment"    archiveCommentSpec
+    describe "addEntry"           addEntrySpec
+    describe "sinkEntry"          sinkEntrySpec
+    describe "loadEntry"          loadEntrySpec
+    describe "copyEntry"          copyEntrySpec
+    describe "checkEntry"         checkEntrySpec
+    describe "recompress"         recompressSpec
 
 ----------------------------------------------------------------------------
 -- Arbitrary instances and generators
 
 instance Arbitrary Text where
   arbitrary = T.pack <$> listOf1 arbitrary
+
+instance Arbitrary ByteString where
+  arbitrary = B.pack <$> listOf arbitrary
+
+instance Arbitrary CompressionMethod where
+  arbitrary = elements [Store, Deflate, BZip2]
 
 instance Arbitrary (Path Rel File) where
   arbitrary = do
@@ -114,7 +130,7 @@ binASCII = LB.toStrict . LB.toLazyByteString <$> go
           , (1,  return mempty) ]
 
 instance Show EntryDescription where
-  show _ = "<entry description>"
+  show = const "<entry description>"
 
 ----------------------------------------------------------------------------
 -- Pure operations and periphery
@@ -224,8 +240,87 @@ archiveCommentSpec = do
         getArchiveComment
       comment `shouldBe` Nothing
 
-----------------------------------------------------------------------------
--- Complex construction/restoration
+addEntrySpec :: SpecWith (Path Abs File)
+addEntrySpec =
+  context "when an entry is added" $
+    it "is there" $ \path -> property $ \m b s -> do
+      info <- createArchive path $ do
+        addEntry m b s
+        commit
+        (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
+      info `shouldBe` (b, m)
+
+sinkEntrySpec :: SpecWith (Path Abs File)
+sinkEntrySpec =
+  context "when an entry is sunk" $
+    it "is there" $ \path -> property $ \m b s -> do
+      info <- createArchive path $ do
+        sinkEntry m (yield b) s
+        commit
+        (,) <$> sourceEntry s (CL.foldMap id)
+          <*> (edCompression . (! s) <$> getEntries)
+      info `shouldBe` (b, m)
+
+loadEntrySpec :: SpecWith (Path Abs File)
+loadEntrySpec =
+  context "when an entry is loaded" $
+    it "is there" $ \path -> property $ \m b s -> do
+      let vpath = deriveVacant path
+      B.writeFile (toFilePath vpath) b
+      createArchive path $ do
+        loadEntry m (const $ return s) vpath
+        commit
+        liftIO (removeFile vpath)
+        saveEntry s vpath
+      B.readFile (toFilePath vpath) `shouldReturn` b
+
+copyEntrySpec :: SpecWith (Path Abs File)
+copyEntrySpec =
+  context "when entry is copied form another archive" $
+    it "is there" $ \path -> property $ \m b s -> do
+      let vpath = deriveVacant path
+      createArchive vpath (addEntry m b s)
+      info <- createArchive path $ do
+        copyEntry vpath s s
+        commit
+        (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
+      info `shouldBe` (b, m)
+
+checkEntrySpec :: SpecWith (Path Abs File)
+checkEntrySpec = do
+  context "when entry is intact" $
+    it "passes the check" $ \path -> property $ \m b s -> do
+      check <- createArchive path $ do
+        addEntry m b s
+        commit
+        checkEntry s
+      check `shouldBe` True
+  context "when entry is corrupted" $
+    it "does not pass the check" $ \path -> property $ \b s ->
+      not (B.null b) ==> do
+        let r = 50 + (B.length . T.encodeUtf8 . getEntryName $ s)
+        offset <- createArchive path $ do
+          addEntry Store b s
+          commit
+          fromIntegral . edOffset . (! s) <$> getEntries
+        withFile (toFilePath path) ReadWriteMode $ \h -> do
+          hSeek h AbsoluteSeek (offset + fromIntegral r)
+          byte <- B.map complement <$> B.hGet h 1
+          hSeek h RelativeSeek (-1)
+          B.hPut h byte
+        withArchive path (checkEntry s) `shouldReturn` False
+
+recompressSpec :: SpecWith (Path Abs File)
+recompressSpec =
+  context "when recompression is used" $
+    it "gets recompressed" $ \path -> property $ \m m' b s -> do
+      info <- createArchive path $ do
+        addEntry m b s
+        commit
+        recompress m' s
+        commit
+        (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
+      info `shouldBe` (b, m')
 
 -- List of tests to write:
 
@@ -268,6 +363,12 @@ isParsingFailed _ _ _ = False
 withSandbox :: ActionWith (Path Abs File) -> IO ()
 withSandbox action = withSystemTempDir "zip-sandbox" $ \dir ->
   action (dir </> $(mkRelFile "foo.zip"))
+
+-- | Given primary name (name of archive), generate a name that does not
+-- collide with it.
+
+deriveVacant :: Path Abs File -> Path Abs File
+deriveVacant = (</> $(mkRelFile "bar")) . parent
 
 -- | Canonical representation of empty Zip archive.
 

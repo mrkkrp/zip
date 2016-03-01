@@ -94,6 +94,7 @@ test-suite tests
     ghc-options:      -O2 -Wall
   build-depends:      base             >= 4.7 && < 5
                     , bytestring       >= 0.9
+                    , conduit          >= 1.1
                     , containers       >= 0.5.6.2
                     , filepath         >= 1.2
                     , QuickCheck       >= 2.4 && < 3
