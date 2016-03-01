@@ -135,7 +135,7 @@ data Zip64ExtraField = Zip64ExtraField
   , z64efCompressedSize   :: Natural
   , z64efOffset           :: Natural }
 
--- | MS-DOS date-time: a pair of Word16s (date, time) with the following
+-- | MS-DOS date-time: a pair of 'Word16' (date, time) with the following
 -- structure:
 --
 -- > DATE bit     0 - 4           5 - 8           9 - 15
@@ -292,11 +292,12 @@ optimize = foldl' f
       SinkEntry m src s ->
         ( pa { paSinkEntry   = M.insert s src (paSinkEntry pa)
              , paCopyEntry   = M.map (M.filter (/= s)) (paCopyEntry pa) }
-        , ea { eaCompression = M.insert s m (eaCompression ea) } )
+        , (clearEditingFor s ea)
+             { eaCompression = M.insert s m (eaCompression ea) } )
       CopyEntry path os ns ->
         ( pa { paSinkEntry = M.delete ns (paSinkEntry pa)
              , paCopyEntry = M.alter (ef os ns) path (paCopyEntry pa) }
-        , ea )
+        , clearEditingFor ns ea )
       RenameEntry os ns ->
         ( pa { paCopyEntry = M.map (M.map $ re os ns) (paCopyEntry pa)
              , paSinkEntry = renameKey os ns (paSinkEntry pa) }
@@ -309,12 +310,7 @@ optimize = foldl' f
       DeleteEntry s ->
         ( pa { paSinkEntry = M.delete s (paSinkEntry pa)
              , paCopyEntry = M.map (M.delete s) (paCopyEntry pa) }
-        , ea { eaCompression   = M.delete s (eaCompression ea)
-             , eaEntryComment  = M.delete s (eaEntryComment ea)
-             , eaDeleteComment = M.delete s (eaDeleteComment ea)
-             , eaModTime       = M.delete s (eaModTime ea)
-             , eaExtraField    = M.delete s (eaExtraField ea)
-             , eaDeleteField   = M.delete s (eaDeleteField ea) } )
+        , clearEditingFor s ea )
       Recompress m s ->
         (pa, ea { eaCompression = M.insert s m (eaCompression ea) })
       SetEntryComment txt s ->
@@ -332,6 +328,13 @@ optimize = foldl' f
         , ea { eaExtraField = M.alter (er n) s (eaExtraField ea)
              , eaDeleteField = M.alter (ef n ()) s (eaDeleteField ea) } )
       _ -> (pa, ea)
+    clearEditingFor s ea = ea
+      { eaCompression   = M.delete s (eaCompression ea)
+      , eaEntryComment  = M.delete s (eaEntryComment ea)
+      , eaDeleteComment = M.delete s (eaDeleteComment ea)
+      , eaModTime       = M.delete s (eaModTime ea)
+      , eaExtraField    = M.delete s (eaExtraField ea)
+      , eaDeleteField   = M.delete s (eaDeleteField ea) }
     re o n x = if x == o then n else x
     ef k v (Just m) = Just (M.insert k v m)
     ef k v Nothing  = Just (M.singleton k v)
@@ -937,9 +940,9 @@ toMsDosTime :: UTCTime -> MsDosTime
 toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
   where
     dosTime = fromIntegral (seconds + shiftL minutes 5 + shiftL hours 11)
-    dosDate = fromIntegral (day + shiftL month 5 + shiftL year 9)
+    dosDate = fromIntegral (day     + shiftL month   5 + shiftL year  9)
 
-    seconds = fromEnum (todSec tod) `div` 2
+    seconds = fromEnum (todSec tod) `quot` 2000000000000
     minutes = todMin tod
     hours   = todHour tod
     tod     = timeToTimeOfDay utctDayTime
@@ -952,12 +955,12 @@ toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
 fromMsDosTime :: MsDosTime -> UTCTime
 fromMsDosTime MsDosTime {..} = UTCTime
   (fromGregorian year month day)
-  (secondsToDiffTime $ hours * 60 * 60 + minutes * 60 + seconds)
+  (secondsToDiffTime $ hours * 3600 + minutes * 60 + seconds)
   where
-    seconds = fromIntegral $ 2 * (msDosTime .&. 0x1f)
-    minutes = fromIntegral $ shiftR msDosTime 5 .&. 0x3f
-    hours   = fromIntegral (shiftR msDosTime 11)
+    seconds = fromIntegral $ 2 * (msDosTime     .&. 0x1f)
+    minutes = fromIntegral (shiftR msDosTime 5  .&. 0x3f)
+    hours   = fromIntegral (shiftR msDosTime 11 .&. 0x1f)
 
     day     = fromIntegral (msDosDate .&. 0x1f)
-    month   = fromIntegral $ shiftR msDosDate 5 .&. 0xf
+    month   = fromIntegral $ shiftR msDosDate 5 .&. 0x0f
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
