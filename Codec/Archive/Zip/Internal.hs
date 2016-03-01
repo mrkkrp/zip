@@ -844,8 +844,7 @@ renameKey ok nk m = case M.lookup ok m of
 -- | Like 'fromIntegral', but with saturation when converting to bounded
 -- types.
 
-withSaturation
-  :: forall a b. (Integral a, Ord a, Integral b, Bounded b) => a -> b
+withSaturation :: forall a b. (Integral a, Integral b, Bounded b) => a -> b
 withSaturation x =
   if x > fromIntegral (maxBound :: b)
     then maxBound :: b
