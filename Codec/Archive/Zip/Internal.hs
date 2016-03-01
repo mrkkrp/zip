@@ -641,7 +641,7 @@ putHeader c' s EntryDescription {..} = do
       unicode   = needsUnicode entryName
         || maybe False needsUnicode edComment
       modTime   = toMsDosTime edModified
-  putWord16le (if unicode then 0x0000 else 0x0800)
+  putWord16le (if unicode then setBit 0 11 else 0)
   -- ↑ general purpose bit-flag
   putWord16le (fromCompressionMethod edCompression) -- compression method
   putWord16le (msDosTime modTime) -- last mod file time
