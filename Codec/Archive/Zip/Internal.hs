@@ -392,7 +392,7 @@ sinkEntry h s o src EditingActions {..} = do
         { edVersionMadeBy    = zipVersion
         , edVersionNeeded    = zipVersion
         , edCompression      = compression
-        , edModified         = M.findWithDefault modTime s eaModTime
+        , edModTime          = M.findWithDefault modTime s eaModTime
         , edCRC32            = 0 -- to be overwritten after streaming
         , edCompressedSize   = 0 -- ↑
         , edUncompressedSize = 0 -- ↑
@@ -547,7 +547,7 @@ getCDHeader = do
             { edVersionMadeBy    = versionMadeBy
             , edVersionNeeded    = versionNeeded
             , edCompression      = compression
-            , edModified         = fromMsDosTime (MsDosTime modDate modTime)
+            , edModTime          = fromMsDosTime (MsDosTime modDate modTime)
             , edCRC32            = crc32
             , edCompressedSize   = z64efCompressedSize   z64ef
             , edUncompressedSize = z64efUncompressedSize z64ef
@@ -640,7 +640,7 @@ putHeader c' s EntryDescription {..} = do
       comment   = B.take 0xffff (maybe B.empty T.encodeUtf8 edComment)
       unicode   = needsUnicode entryName
         || maybe False needsUnicode edComment
-      modTime   = toMsDosTime edModified
+      modTime   = toMsDosTime edModTime
   putWord16le (if unicode then setBit 0 11 else 0)
   -- ↑ general purpose bit-flag
   putWord16le (fromCompressionMethod edCompression) -- compression method

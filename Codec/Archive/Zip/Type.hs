@@ -154,7 +154,7 @@ data EntryDescription = EntryDescription
   { edVersionMadeBy    :: Version -- ^ Version made by
   , edVersionNeeded    :: Version -- ^ Version needed to extract
   , edCompression      :: CompressionMethod -- ^ Compression method
-  , edModified         :: UTCTime -- ^ Last modification date and time
+  , edModTime          :: UTCTime -- ^ Last modification date and time
   , edCRC32            :: Word32  -- ^ CRC32 check sum
   , edCompressedSize   :: Natural -- ^ Size of compressed entry
   , edUncompressedSize :: Natural -- ^ Size of uncompressed entry
