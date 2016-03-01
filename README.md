@@ -133,14 +133,18 @@ how to get extracted data. The following methods are supported:
 
 ### ZIP64
 
-When necessary, the `ZIP64` extension is automatically enabled. It's
-necessary when anything from this list takes place:
+When necessary, the `ZIP64` extension is automatically used. It's necessary
+when anything from this list takes place:
 
 * Total size of archive is greater than 4 GB.
 
 * Size of compressed/uncompressed file in archive is greater than 4 GB.
 
 * There are more than 65535 entries in archive.
+
+The library is particularly suited for processing of large files. For
+example, I've been able to easily create 6.5 GB archive with reasonable
+speed and without any significant memory consumption.
 
 ### Filenames
 
