@@ -266,6 +266,7 @@ It's also possible to:
 * delete comment with `deleteEntryComment`
 * set modification time with `setModTime`
 * manipulate extra fields with `addExtraField` and `deleteExtraField`
+* check if entry is intact with `checkEntry`
 * undo changes with `undoEntryCanges`, `undoArchiveChanges`, and `undoAll`
 * force changes to be written to file system with `commit`
 

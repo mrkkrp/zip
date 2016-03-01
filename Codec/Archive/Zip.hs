@@ -58,6 +58,7 @@ module Codec.Archive.Zip
   , getEntry
   , sourceEntry
   , saveEntry
+  , checkEntry
   , unpackInto
   , getArchiveComment
   , getArchiveDescription
@@ -95,7 +96,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink, ($$), yield)
-import Data.Map.Strict (Map)
+import Data.Map.Strict (Map, (!))
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
@@ -247,6 +248,22 @@ saveEntry
   -> Path b File       -- ^ Where to save the file
   -> ZipArchive ()
 saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
+
+-- | Calculate CRC32 check sum and compare it with value read from
+-- archive. The function returns 'True' when the check sums are the same —
+-- that is, data is not corrupted.
+--
+-- Throws: 'EntryDoesNotExist'.
+
+checkEntry
+  :: EntrySelector     -- ^ Selector that identifies archive entry
+  -> ZipArchive Bool   -- ^ Is the entry intact?
+checkEntry s = do
+  calculated <- sourceEntry s I.crc32Sink
+  given      <- edCRC32 . (! s) <$> getEntries
+  -- ↑ NOTE We can assume that entry exists for sure because otherwise
+  -- 'sourceEntry' would have thrown 'EntryDoesNotExist' already.
+  return (calculated == given)
 
 -- | Unpack entire archive into specified directory. The directory will be
 -- created if it does not exist.

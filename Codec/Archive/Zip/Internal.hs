@@ -16,6 +16,7 @@ module Codec.Archive.Zip.Internal
   , targetEntry
   , scanArchive
   , sourceEntry
+  , crc32Sink
   , commit )
 where
 
@@ -434,8 +435,7 @@ sinkData
   -> Sink ByteString (ResourceT IO) DataDescriptor
      -- ^ 'Sink' where to stream data
 sinkData h compression = do
-  let crc32Sink = CL.fold crc32Update 0
-      sizeSink  = CL.fold (\acc input -> fromIntegral (B.length input) + acc) 0
+  let sizeSink  = CL.fold (\acc input -> fromIntegral (B.length input) + acc) 0
       dataSink  = fst <$> zipSinks sizeSink (CB.sinkHandle h)
       withCompression = zipSinks (zipSinks sizeSink crc32Sink)
   ((uncompressedSize, crc32), compressedSize) <-
@@ -926,6 +926,11 @@ decompressingPipe
 decompressingPipe Store   = awaitForever yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 decompressingPipe BZip2   = BZ.bunzip2
+
+-- | Sink that calculates CRC32 check sum for incoming stream.
+
+crc32Sink :: Sink ByteString (ResourceT IO) Word32
+crc32Sink = CL.fold crc32Update 0
 
 -- | Convert 'UTCTime' to MS-DOS time format.
 
