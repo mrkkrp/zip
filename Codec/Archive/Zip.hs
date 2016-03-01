@@ -466,7 +466,8 @@ commit = do
   odesc    <- getArchiveDescription
   oentries <- getEntries
   actions  <- getPending
-  unless (S.null actions) $ do
+  exists   <- doesFileExist file
+  unless (S.null actions && exists) $ do
     liftIO (I.commit file odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
     -- archive is to scan it again — manual manipulations with descriptions
