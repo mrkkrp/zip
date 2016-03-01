@@ -77,7 +77,7 @@ module Codec.Archive.Zip
   , setModTime
   , addExtraField
   , deleteExtraField
-  , modifyEntries
+  , forEntries
     -- ** Operations on archive as a whole
   , setArchiveComment
   , deleteArchiveComment
@@ -404,10 +404,10 @@ deleteExtraField n s = addPending (I.DeleteExtraField n s)
 
 -- | Perform an action on every entry in archive.
 
-modifyEntries
+forEntries
   :: (EntrySelector -> ZipArchive ()) -- ^ Action to perform
   -> ZipArchive ()
-modifyEntries action = getEntries >>= mapM_ action . M.keysSet
+forEntries action = getEntries >>= mapM_ action . M.keysSet
 
 -- | Set comment of entire archive.
 
