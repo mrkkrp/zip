@@ -150,11 +150,18 @@ getEntryNameSpec =
       not . T.null . getEntryName $ s
 
 decodeCP437Spec :: Spec
-decodeCP437Spec =
+decodeCP437Spec = do
   context "when ASCII-compatible subset is used" $
     it "has the same result as decoding UTF-8" . property $
       forAll binASCII $ \bin ->
         decodeCP437 bin `shouldBe` T.decodeUtf8 bin
+  context "when non-ASCII subset is used" $
+    it "is decoded correctly" $ do
+      let c b t = decodeCP437 (B.pack b ) `shouldBe` t
+      c [0x80..0x9f] "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ"
+      c [0xa0..0xbf] "áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐"
+      c [0xc0..0xdf] "└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"
+      c [0xe0..0xff] "αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
 
 ----------------------------------------------------------------------------
 -- Primitive editing/querying actions
