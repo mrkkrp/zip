@@ -40,13 +40,14 @@ module Main (main) where
 import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
 import Control.Monad.IO.Class
-import Data.ByteString (ByteString)
 import Data.Bits (complement)
+import Data.ByteString (ByteString)
 import Data.Conduit (yield)
 import Data.List (intercalate)
 import Data.Map (Map, (!))
 import Data.Monoid
 import Data.Text (Text)
+import Data.Time
 import Path
 import Path.IO
 import System.IO
@@ -83,6 +84,8 @@ main = hspec $ do
     describe "copyEntry"          copyEntrySpec
     describe "checkEntry"         checkEntrySpec
     describe "recompress"         recompressSpec
+    describe "entry comment"      entryCommentSpec
+    describe "setModTime"         setModTimeSpec
 
 ----------------------------------------------------------------------------
 -- Arbitrary instances and generators
@@ -95,6 +98,11 @@ instance Arbitrary ByteString where
 
 instance Arbitrary CompressionMethod where
   arbitrary = elements [Store, Deflate, BZip2]
+
+instance Arbitrary UTCTime where
+  arbitrary = UTCTime
+    <$> (ModifiedJulianDay <$> choose (44227, 90978))
+    <*> (secondsToDiffTime <$> choose (0, 86400))
 
 instance Arbitrary (Path Rel File) where
   arbitrary = do
@@ -239,6 +247,24 @@ archiveCommentSpec = do
         commit
         getArchiveComment
       comment `shouldBe` Nothing
+  context "when pre-existing comment is overwritten" $
+    it "returns the new comment" $ \path -> property $ \txt txt' -> do
+      comment <- createArchive path $ do
+        setArchiveComment txt
+        commit
+        setArchiveComment txt'
+        commit
+        getArchiveComment
+      comment `shouldBe` Just txt'
+  context "when pre-existing comment is deleted" $
+    it "actually deletes it" $ \path -> property $ \txt -> do
+      comment <- createArchive path $ do
+        setArchiveComment txt
+        commit
+        deleteArchiveComment
+        commit
+        getArchiveComment
+      comment `shouldBe` Nothing
 
 addEntrySpec :: SpecWith (Path Abs File)
 addEntrySpec =
@@ -322,7 +348,66 @@ recompressSpec =
         (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
       info `shouldBe` (b, m')
 
--- List of tests to write:
+entryCommentSpec :: SpecWith (Path Abs File)
+entryCommentSpec = do
+  context "when comment is committed (delete/set)" $
+    it "reads it and updates" $ \path -> property $ \txt s -> do
+      comment <- createArchive path $ do
+        addEntry Store "foo" s
+        deleteEntryComment s
+        setEntryComment txt s
+        commit
+        edComment . (! s) <$> getEntries
+      comment `shouldBe` Just txt
+  context "when comment is committed (set/delete)" $
+    it "reads it and updates" $ \path -> property $ \txt s -> do
+      comment <- createArchive path $ do
+        addEntry Store "foo" s
+        setEntryComment txt s
+        deleteEntryComment s
+        commit
+        edComment . (! s) <$> getEntries
+      comment `shouldBe` Nothing
+  context "when pre-existing comment is overwritten" $
+    it "returns the new comment" $ \path -> property $ \txt txt' s -> do
+      comment <- createArchive path $ do
+        addEntry Store "foo" s
+        setEntryComment txt s
+        commit
+        setEntryComment txt' s
+        commit
+        edComment . (! s) <$> getEntries
+      comment `shouldBe` Just txt'
+  context "when pre-existing comment is deleted" $
+    it "actually deletes it" $ \path -> property $ \txt s -> do
+      comment <- createArchive path $ do
+        addEntry Store "foo" s
+        setEntryComment txt s
+        commit
+        deleteEntryComment s
+        commit
+        edComment . (! s) <$> getEntries
+      comment `shouldBe` Nothing
+
+setModTimeSpec :: SpecWith (Path Abs File)
+setModTimeSpec = do
+  context "when mod time is set (after creation)" $
+    it "reads it and updates" $ \path -> property $ \time s -> do
+      modTime <- createArchive path $ do
+        addEntry Store "foo" s
+        setModTime time s
+        commit
+        edModTime . (! s) <$> getEntries
+      modTime `shouldSatisfy` isCloseTo time
+  context "when mod time is set (before creation)" $
+    it "has no effect" $ \path -> property $ \time time' s ->
+      not (isCloseTo time time') ==> do
+        modTime <- createArchive path $ do
+          setModTime time s
+          addEntry Store "foo" s
+          commit
+          edModTime . (! s) <$> getEntries
+        modTime `shouldNotSatisfy` isCloseTo time
 
 -- Reading of zip archive (listing/inspecting) [no zip64, no unicode]
 -- Reading of zip archive [zip64]
@@ -369,6 +454,11 @@ withSandbox action = withSystemTempDir "zip-sandbox" $ \dir ->
 
 deriveVacant :: Path Abs File -> Path Abs File
 deriveVacant = (</> $(mkRelFile "bar")) . parent
+
+-- | Compare times forgiving minor difference.
+
+isCloseTo :: UTCTime -> UTCTime -> Bool
+isCloseTo a b = abs (diffUTCTime a b) < 2
 
 -- | Canonical representation of empty Zip archive.
 
