@@ -210,6 +210,10 @@ withArchive path m = do
 -- operation that can be used for example to list all entries in archive. Do
 -- not hesitate to use the function frequently: scanning of archive happens
 -- only once anyway.
+--
+-- Please note that returned value only reflects actual contents of archive
+-- in file system, non-committed actions cannot influence list of entries,
+-- see 'commit' for more information.
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
@@ -474,11 +478,12 @@ undoAll :: ZipArchive ()
 undoAll = modifyActions (const S.empty)
 
 -- | Archive contents are not modified instantly, but instead changes are
--- collected as “pending actions” that should be committed. The actions are
--- committed automatically when program leaves the realm of 'ZipArchive'
--- monad (i.e. as part of 'createArchive' or 'withArchive'), or can be
--- forced explicitly with help of this function. Once committed, changes
--- take place in the file system and cannot be undone.
+-- collected as “pending actions” that should be committed in order to
+-- efficiently modify archive in one pass. The actions are committed
+-- automatically when program leaves the realm of 'ZipArchive' monad
+-- (i.e. as part of 'createArchive' or 'withArchive'), or can be forced
+-- explicitly with help of this function. Once committed, changes take place
+-- in the file system and cannot be undone.
 
 commit :: ZipArchive ()
 commit = do
