@@ -464,13 +464,13 @@ deleteArchiveComment = addPending I.DeleteArchiveComment
 
 undoEntryChanges :: EntrySelector -> ZipArchive ()
 undoEntryChanges s = modifyActions f
-  where f = S.filter ((== Just s) . I.targetEntry)
+  where f = S.filter ((/= Just s) . I.targetEntry)
 
 -- | Undo changes to archive as a whole (archive's comment).
 
 undoArchiveChanges :: ZipArchive ()
 undoArchiveChanges = modifyActions f
-  where f = S.filter ((== Nothing) . I.targetEntry)
+  where f = S.filter ((/= Nothing) . I.targetEntry)
 
 -- | Undo all changes made in this editing session.
 
