@@ -314,7 +314,9 @@ optimize = foldl' f
       Recompress m s ->
         (pa, ea { eaCompression = M.insert s m (eaCompression ea) })
       SetEntryComment txt s ->
-        (pa, ea { eaEntryComment = M.insert s txt (eaEntryComment ea) })
+        ( pa
+        , ea { eaEntryComment  = M.insert s txt (eaEntryComment ea)
+             , eaDeleteComment = M.delete s (eaDeleteComment ea) } )
       DeleteEntryComment s ->
         ( pa
         , ea { eaEntryComment  = M.delete s (eaEntryComment ea)
@@ -322,7 +324,9 @@ optimize = foldl' f
       SetModTime time s ->
         (pa, ea { eaModTime = M.insert s time (eaModTime ea) })
       AddExtraField n b s ->
-        (pa, ea { eaExtraField = M.alter (ef n b) s (eaExtraField ea) })
+        ( pa
+        , ea { eaExtraField  = M.alter (ef n b) s (eaExtraField ea)
+             , eaDeleteField = M.delete s (eaDeleteField ea) } )
       DeleteExtraField n s ->
         ( pa
         , ea { eaExtraField = M.alter (er n) s (eaExtraField ea)
@@ -374,13 +378,16 @@ sinkEntry
   -> IO (EntrySelector, EntryDescription)
      -- ^ Info to generate central directory file headers later
 sinkEntry h s o src EditingActions {..} = do
-  modTime <- getCurrentTime
+  currentTime <- getCurrentTime
   offset  <- hTell h
   let compressed = case o of
         GenericOrigin -> Store
         Borrowed ed -> edCompression ed
       compression = M.findWithDefault compressed s eaCompression
       recompression = compression /= compressed
+      modTime = case o of
+        GenericOrigin -> currentTime
+        Borrowed ed -> edModTime ed
       oldExtraFields = case o of
         GenericOrigin -> M.empty
         Borrowed ed -> edExtraField ed
