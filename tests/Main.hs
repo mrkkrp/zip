@@ -513,7 +513,6 @@ renameEntrySpec = do
         commit
         renameEntry s s'
         commit
-        getEntries >>= liftIO . print . M.keys
         (! s') <$> getEntries
       desc' `shouldSatisfy` softEq desc
 
@@ -525,7 +524,7 @@ deleteEntrySpec = do
         z
         deleteEntry s
         commit
-        M.member s <$> getEntries
+        doesEntryExist s
       member `shouldBe` False
   context "when deleting existing entry" $
     it "gets deleted" $ \path -> property $ \(EM s _ z) -> do
@@ -534,7 +533,7 @@ deleteEntrySpec = do
         commit
         deleteEntry s
         commit
-        M.member s <$> getEntries
+        doesEntryExist s
       member `shouldBe` False
 
 -- Do it with comments and other arbitrary settings (make Arbitrary instance

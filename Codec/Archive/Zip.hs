@@ -55,6 +55,8 @@ module Codec.Archive.Zip
   , withArchive
     -- * Retrieving information
   , getEntries
+  , doesEntryExist
+  , getEntryDesc
   , getEntry
   , sourceEntry
   , saveEntry
@@ -205,10 +207,28 @@ withArchive path m = do
 -- Retrieving information
 
 -- | Retrieve description of all archive entries. This is an efficient
--- operation that can be used for example to list all entries in archive.
+-- operation that can be used for example to list all entries in archive. Do
+-- not hesitate to use the function frequently: scanning of archive happens
+-- only once anyway.
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
+
+-- | Check whether specified entry exists in the archive. This is a simple
+-- shortcut defined as:
+--
+-- > doesEntryExist s = M.member s <$> getEntries
+
+doesEntryExist :: EntrySelector -> ZipArchive Bool
+doesEntryExist s = M.member s <$> getEntries
+
+-- | Get 'EntryDescription' for specified entry. This is a simple shortcut
+-- defined as:
+--
+-- > getEntryDesc s = M.lookup s <$> getEntries
+
+getEntryDesc :: EntrySelector -> ZipArchive (Maybe EntryDescription)
+getEntryDesc s = M.lookup s <$> getEntries
 
 -- | Get contents of specific archive entry as strict 'ByteString'. It's not
 -- recommended to use this on big entries, because it will suck out a lot of
