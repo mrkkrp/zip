@@ -43,6 +43,7 @@ import Control.Monad.IO.Class
 import Data.Bits (complement)
 import Data.ByteString (ByteString)
 import Data.Conduit (yield)
+import Data.Foldable (foldl')
 import Data.List (intercalate)
 import Data.Map (Map, (!))
 import Data.Monoid
@@ -86,6 +87,9 @@ main = hspec $ do
     describe "recompress"         recompressSpec
     describe "entry comment"      entryCommentSpec
     describe "setModTime"         setModTimeSpec
+    describe "extra field"        extraFieldSpec
+    describe "renameEntry"        renameEntrySpec
+    describe "deleteEntry"        deleteEntrySpec
 
 ----------------------------------------------------------------------------
 -- Arbitrary instances and generators
@@ -118,8 +122,38 @@ instance Arbitrary EntrySelector where
       Nothing -> arbitrary
       Just s  -> return s
 
-instance Arbitrary (ZipArchive (), Map EntrySelector EntryDescription) where
-  arbitrary = undefined
+data EM = EM EntrySelector EntryDescription (ZipArchive ()) deriving Show
+
+instance Arbitrary EM where
+  arbitrary = do
+    s       <- arbitrary
+    method  <- arbitrary
+    content <- arbitrary
+    modTime <- arbitrary
+    comment <- arbitrary
+    extraFieldTag <- arbitrary `suchThat` (/= 1)
+    extraFieldContent <- arbitrary `suchThat` ((< 0xffff) . B.length)
+    let action = do
+          addEntry method content s
+          setModTime modTime s
+          setEntryComment comment s
+          addExtraField extraFieldTag extraFieldContent s
+    return $ EM s EntryDescription
+      { edVersionMadeBy    = undefined
+      , edVersionNeeded    = undefined
+      , edCompression      = method
+      , edModTime          = modTime
+      , edCRC32            = undefined
+      , edCompressedSize   = undefined
+      , edUncompressedSize = fromIntegral (B.length content)
+      , edOffset           = undefined
+      , edComment          = Just comment
+      , edExtraField       = M.singleton extraFieldTag extraFieldContent }
+      action
+
+instance Arbitrary (Map EntrySelector EntryDescription, ZipArchive ()) where
+  arbitrary = foldl' f (M.empty, return ()) <$> listOf1 arbitrary
+    where f (m, z') (EM s desc z) = (M.insert s desc m, z' >> z)
 
 instance Arbitrary (ZipArchive (), ArchiveDescription) where
   arbitrary = undefined
@@ -138,7 +172,15 @@ binASCII = LB.toStrict . LB.toLazyByteString <$> go
           , (1,  return mempty) ]
 
 instance Show EntryDescription where
-  show = const "<entry description>"
+  show ed = "{ edCompression = " ++ show (edCompression ed) ++
+    "\n, edModTime = " ++ show (edModTime ed) ++
+    "\n, edUncompressedSize = " ++ show (edUncompressedSize ed) ++
+    "\n, edComment = " ++ show (edComment ed) ++
+    "\n, edExtraField = " ++ show (edExtraField ed) ++
+    " }"
+
+instance Show (ZipArchive a) where
+  show = const "<zip archive>"
 
 ----------------------------------------------------------------------------
 -- Pure operations and periphery
@@ -409,12 +451,91 @@ setModTimeSpec = do
           edModTime . (! s) <$> getEntries
         modTime `shouldNotSatisfy` isCloseTo time
 
--- Reading of zip archive (listing/inspecting) [no zip64, no unicode]
--- Reading of zip archive [zip64]
--- Reading of zip archive [unicode]
--- Reading of zip archive [zip64, unicode]
--- Decompressing of zip archive
--- Creation, compression, decompression and comparing. Probably QuickCheck
+extraFieldSpec :: SpecWith (Path Abs File)
+extraFieldSpec = do
+  context "when extra field is committed (delete/set)" $
+    it "reads it and updates" $ \path -> property $ \n b s ->
+      n /= 1 ==> do
+        efield <- createArchive path $ do
+          addEntry Store "foo" s
+          deleteExtraField n s
+          addExtraField n b s
+          commit
+          M.lookup n . edExtraField . (! s) <$> getEntries
+        efield `shouldBe` Just b
+  context "when extra field is committed (set/delete)" $
+    it "reads it and updates" $ \path -> property $ \n b s ->
+      n /= 1 ==> do
+        efield <- createArchive path $ do
+          addEntry Store "foo" s
+          addExtraField n b s
+          deleteExtraField n s
+          commit
+          M.lookup n . edExtraField . (! s) <$> getEntries
+        efield `shouldBe` Nothing
+  context "when pre-existing extra field is overwritten" $
+    it "reads it and updates" $ \path -> property $ \n b b' s ->
+      n /= 1 ==> do
+        efield <- createArchive path $ do
+          addEntry Store "foo" s
+          addExtraField n b s
+          commit
+          addExtraField n b' s
+          commit
+          M.lookup n . edExtraField . (! s) <$> getEntries
+        efield `shouldBe` Just b'
+  context "when pre-existing extra field is deleted" $
+    it "actually deletes it" $ \path -> property $ \n b s ->
+      n /= 1 ==> do
+        efield <- createArchive path $ do
+          addEntry Store "foo" s
+          addExtraField n b s
+          commit
+          deleteExtraField n s
+          commit
+          M.lookup n . edExtraField . (! s) <$> getEntries
+        efield `shouldBe` Nothing
+
+renameEntrySpec :: SpecWith (Path Abs File)
+renameEntrySpec = do
+  context "when renaming after editing of new entry" $
+    it "produces correct result" $ \path -> property $ \(EM s desc z) s' -> do
+      desc' <- createArchive path $ do
+        z
+        renameEntry s s'
+        commit
+        (! s') <$> getEntries
+      desc' `shouldSatisfy` softEq desc
+  context "when renaming existing entry" $
+    it "gets renamed" $ \path -> property $ \(EM s desc z) s' -> do
+      desc' <- createArchive path $ do
+        z
+        commit
+        renameEntry s s'
+        commit
+        getEntries >>= liftIO . print . M.keys
+        (! s') <$> getEntries
+      desc' `shouldSatisfy` softEq desc
+
+deleteEntrySpec :: SpecWith (Path Abs File)
+deleteEntrySpec = do
+  context "when deleting after editing of new entry" $
+    it "produces correct result" $ \path -> property $ \(EM s _ z) -> do
+      member <- createArchive path $ do
+        z
+        deleteEntry s
+        commit
+        M.member s <$> getEntries
+      member `shouldBe` False
+  context "when deleting existing entry" $
+    it "gets deleted" $ \path -> property $ \(EM s _ z) -> do
+      member <- createArchive path $ do
+        z
+        commit
+        deleteEntry s
+        commit
+        M.member s <$> getEntries
+      member `shouldBe` False
 
 -- Do it with comments and other arbitrary settings (make Arbitrary instance
 -- for ZipArchive ()).
@@ -459,6 +580,16 @@ deriveVacant = (</> $(mkRelFile "bar")) . parent
 
 isCloseTo :: UTCTime -> UTCTime -> Bool
 isCloseTo a b = abs (diffUTCTime a b) < 2
+
+-- | Compare only some fields of 'EntryDescription' record.
+
+softEq :: EntryDescription -> EntryDescription -> Bool
+softEq a b =
+  edCompression a == edCompression b &&
+  isCloseTo (edModTime a) (edModTime b) &&
+  edUncompressedSize a == edUncompressedSize b &&
+  edComment a == edComment b &&
+  M.delete 1 (edExtraField a) == M.delete 1 (edExtraField b)
 
 -- | Canonical representation of empty Zip archive.
 
