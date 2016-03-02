@@ -46,6 +46,7 @@ import Data.Conduit (yield)
 import Data.Foldable (foldl')
 import Data.List (intercalate)
 import Data.Map (Map, (!))
+import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Text (Text)
 import Data.Time
@@ -79,6 +80,7 @@ main = hspec $ do
     describe "createArchive"      createArchiveSpec
     describe "withArchive"        withArchiveSpec
     describe "archive comment"    archiveCommentSpec
+    describe "getEntryDesc"       getEntryDescSpec
     describe "addEntry"           addEntrySpec
     describe "sinkEntry"          sinkEntrySpec
     describe "loadEntry"          loadEntrySpec
@@ -90,6 +92,13 @@ main = hspec $ do
     describe "extra field"        extraFieldSpec
     describe "renameEntry"        renameEntrySpec
     describe "deleteEntry"        deleteEntrySpec
+    describe "forEntries"         forEntriesSpec
+    describe "undoEntryChanges"   undoEntryChangesSpec
+    describe "undoArchiveChanges" undoArchiveChangesSpec
+    describe "undoAll"            undoAllSpec
+    describe "consistencySpec"    consistencySpec
+    describe "packDirRecur"       packDirRecurSpec
+    describe "unpackInto"         unpackIntoSpec
 
 ----------------------------------------------------------------------------
 -- Arbitrary instances and generators
@@ -151,12 +160,11 @@ instance Arbitrary EM where
       , edExtraField       = M.singleton extraFieldTag extraFieldContent }
       action
 
-instance Arbitrary (Map EntrySelector EntryDescription, ZipArchive ()) where
-  arbitrary = foldl' f (M.empty, return ()) <$> listOf1 arbitrary
-    where f (m, z') (EM s desc z) = (M.insert s desc m, z' >> z)
+data EC = EC (Map EntrySelector EntryDescription) (ZipArchive ()) deriving Show
 
-instance Arbitrary (ZipArchive (), ArchiveDescription) where
-  arbitrary = undefined
+instance Arbitrary EC where
+  arbitrary = foldl' f (EC M.empty (return ())) <$> listOf1 arbitrary
+    where f (EC m z') (EM s desc z) = EC (M.insert s desc m) (z' >> z)
 
 charGen :: Gen Char
 charGen = frequency
@@ -307,6 +315,13 @@ archiveCommentSpec = do
         commit
         getArchiveComment
       comment `shouldBe` Nothing
+
+getEntryDescSpec :: SpecWith (Path Abs File)
+getEntryDescSpec =
+  it "always returns correct description" $
+    \path -> property $ \(EM s desc z) -> do
+      desc' <- fromJust <$> createArchive path (z >> commit >> getEntryDesc s)
+      desc' `shouldSatisfy` softEq desc
 
 addEntrySpec :: SpecWith (Path Abs File)
 addEntrySpec =
@@ -536,12 +551,82 @@ deleteEntrySpec = do
         doesEntryExist s
       member `shouldBe` False
 
--- Do it with comments and other arbitrary settings (make Arbitrary instance
--- for ZipArchive ()).
+forEntriesSpec :: SpecWith (Path Abs File)
+forEntriesSpec =
+  it "affects all existing entries" $ \path -> property $ \(EC m z) txt -> do
+    m' <- createArchive path $ do
+      z
+      commit
+      forEntries (setEntryComment txt)
+      commit
+      getEntries
+    let f ed = ed { edComment = Just txt }
+    m' `shouldSatisfy` softEqMap (M.map f m)
 
--- Check ‘CopyEntry’ thing separately (?)
+undoEntryChangesSpec :: SpecWith (Path Abs File)
+undoEntryChangesSpec =
+  it "cancels all actions for specified entry" $
+    \path -> property $ \(EM s _ z) -> do
+      member <- createArchive path $ do
+        z
+        undoEntryChanges s
+        commit
+        doesEntryExist s
+      member `shouldBe` False
 
--- Try with different compression methods
+undoArchiveChangesSpec :: SpecWith (Path Abs File)
+undoArchiveChangesSpec = do
+  it "cancels archive comment editing" $ \path -> property $ \txt -> do
+    comment <- createArchive path $ do
+      setArchiveComment txt
+      undoArchiveChanges
+      commit
+      getArchiveComment
+    comment `shouldBe` Nothing
+  it "cancels archive comment deletion" $ \path -> property $ \txt -> do
+    comment <- createArchive path $ do
+      setArchiveComment txt
+      commit
+      deleteArchiveComment
+      undoArchiveChanges
+      commit
+      getArchiveComment
+    comment `shouldBe` Just txt
+
+undoAllSpec :: SpecWith (Path Abs File)
+undoAllSpec =
+  it "cancels all editing at once" $ \path -> property $ \(EC _ z) txt -> do
+    let fp = toFilePath path
+    createArchive path (return ())
+    withArchive path $ do
+      z
+      setArchiveComment txt
+      undoAll
+      liftIO (B.writeFile fp B.empty)
+    B.readFile fp `shouldReturn` B.empty
+
+----------------------------------------------------------------------------
+-- Complex construction/restoration
+
+consistencySpec :: SpecWith (Path Abs File)
+consistencySpec =
+  it "can save and restore arbitrary archive" $
+    \path -> property $ \(EC m z) txt -> do
+      (txt', m') <- createArchive path $ do
+        z
+        setArchiveComment txt
+        commit
+        (,) <$> getArchiveComment <*> getEntries
+      txt' `shouldBe` Just txt
+      m' `shouldSatisfy` softEqMap m
+
+packDirRecurSpec :: SpecWith (Path Abs File)
+packDirRecurSpec =
+  it "packs arbitrary directory recursively" $ const pending
+
+unpackIntoSpec :: SpecWith (Path Abs File)
+unpackIntoSpec =
+  it "unpacks archive contents into directory" $ const pending
 
 ----------------------------------------------------------------------------
 -- Helpers
@@ -589,6 +674,16 @@ softEq a b =
   edUncompressedSize a == edUncompressedSize b &&
   edComment a == edComment b &&
   M.delete 1 (edExtraField a) == M.delete 1 (edExtraField b)
+
+-- | Compare two maps describing archive entries in such a way that only
+-- some fields in 'EntryDescription' records are tested.
+
+softEqMap
+  :: Map EntrySelector EntryDescription
+  -> Map EntrySelector EntryDescription
+  -> Bool
+softEqMap n m = M.null (M.differenceWith f n m)
+  where f a b = if softEq a b then Nothing else Just a
 
 -- | Canonical representation of empty Zip archive.
 
