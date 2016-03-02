@@ -39,6 +39,7 @@ module Main (main) where
 
 import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Bits (complement)
 import Data.ByteString (ByteString)
@@ -61,6 +62,7 @@ import qualified Data.ByteString.Builder as LB
 import qualified Data.ByteString.Lazy    as LB
 import qualified Data.Conduit.List       as CL
 import qualified Data.Map                as M
+import qualified Data.Set                as E
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified System.FilePath.Windows as Windows
@@ -171,7 +173,7 @@ charGen = frequency
   [ (3, choose ('a', 'z'))
   , (3, choose ('A', 'Z'))
   , (3, choose ('0', '9'))
-  , (1, arbitrary) ]
+  , (1, arbitrary `suchThat` (/= '\NUL')) ]
 
 binASCII :: Gen ByteString
 binASCII = LB.toStrict . LB.toLazyByteString <$> go
@@ -622,11 +624,28 @@ consistencySpec =
 
 packDirRecurSpec :: SpecWith (Path Abs File)
 packDirRecurSpec =
-  it "packs arbitrary directory recursively" $ const pending
+  it "packs arbitrary directory recursively" $
+    \path -> property $ \predicted -> do
+      let dir = parent path
+          f   = stripDir dir >=> mkEntrySelector
+      forM_ predicted $ \s -> do
+        let item = dir </> unEntrySelector s
+        ensureDir (parent item)
+        B.writeFile (toFilePath item) "foo"
+      selectors <- M.keysSet <$>
+        createArchive path (packDirRecur Store f dir >> commit >> getEntries)
+      selectors `shouldBe` E.fromList predicted
 
 unpackIntoSpec :: SpecWith (Path Abs File)
 unpackIntoSpec =
-  it "unpacks archive contents into directory" $ const pending
+  it "unpacks archive contents into directory" $
+    \path -> property $ \(EC m z) -> do
+      let dir = parent path
+      createArchive path (z >> commit >> unpackInto dir)
+      removeFile path
+      selectors <- listDirRecur dir >>=
+        mapM (stripDir dir >=> mkEntrySelector) . snd
+      E.fromList selectors `shouldBe` M.keysSet m
 
 ----------------------------------------------------------------------------
 -- Helpers
