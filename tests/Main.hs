@@ -114,8 +114,8 @@ instance Arbitrary CompressionMethod where
 
 instance Arbitrary UTCTime where
   arbitrary = UTCTime
-    <$> (ModifiedJulianDay <$> choose (44227, 90978))
-    <*> (secondsToDiffTime <$> choose (0, 86400))
+    <$> (ModifiedJulianDay <$> choose (44239, 90990))
+    <*> (secondsToDiffTime <$> choose (0, 86399))
 
 instance Arbitrary (Path Rel File) where
   arbitrary = do
@@ -676,7 +676,7 @@ softEq a b =
   M.delete 1 (edExtraField a) == M.delete 1 (edExtraField b)
 
 -- | Compare two maps describing archive entries in such a way that only
--- some fields in 'EntryDescription' records are tested.
+-- some fields in 'EntryDescription' record are tested.
 
 softEqMap
   :: Map EntrySelector EntryDescription
