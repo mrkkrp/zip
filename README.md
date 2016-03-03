@@ -166,7 +166,7 @@ archive.
 ## Quick start
 
 The module `Codec.Archive.Zip` provides everything you need to manipulate
-Zip archives. There are three things that should clarified right away, to
+Zip archives. There are three things that should be clarified right away, to
 avoid confusion in the future.
 
 First, we use `EntrySelector` type that can be obtained from `Path Rel File`
