@@ -30,7 +30,7 @@ install:
 script:
  - cabal configure --enable-tests --enable-coverage -v2 -f dev
  - cabal build
- - travis_wait 60 cabal test --show-details=always
+ - travis_wait 20 cabal test --show-details=always
  - cabal sdist
  - cabal haddock | grep "100%" | wc -l | grep "4"
 

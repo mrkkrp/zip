@@ -174,7 +174,7 @@ charGen = frequency
   [ (3, choose ('a', 'z'))
   , (3, choose ('A', 'Z'))
   , (3, choose ('0', '9'))
-  , (1, arbitrary `suchThat` (/= '\NUL')) ]
+  , (1, arbitrary `suchThat` (>= ' ')) ]
 
 binASCII :: Gen ByteString
 binASCII = LB.toStrict . LB.toLazyByteString <$> go
