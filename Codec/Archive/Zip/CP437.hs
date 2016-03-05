@@ -15,7 +15,6 @@ where
 
 import Data.ByteString (ByteString)
 import Data.Char
-import Data.Monoid
 import Data.Text (Text)
 import Data.Word (Word8)
 import qualified Data.ByteString        as B
@@ -24,9 +23,12 @@ import qualified Data.Text as T
 -- | Decode a 'ByteString' containing CP 437 encoded text.
 
 decodeCP437 :: ByteString -> Text
-decodeCP437 = T.unfoldr (fmap (\(b,rest) -> (decodeByteCP437 b, rest)) . B.uncons)
-
-
+decodeCP437 bs = T.unfoldrN 
+  (B.length bs) 
+  (fmap (\(b,rest) -> (decodeByteCP437 b, rest)) . B.uncons)
+  bs
+        
+        
 -- | Decode single byte of CP437 encoded text.
 
 decodeByteCP437 :: Word8 -> Char
