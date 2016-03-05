@@ -13,20 +13,21 @@ module Codec.Archive.Zip.CP437
   ( decodeCP437 )
 where
 
+import Control.Arrow (first)
 import Data.ByteString (ByteString)
 import Data.Char
-import Data.Monoid
 import Data.Text (Text)
-import Data.Text.Lazy (toStrict)
 import Data.Word (Word8)
-import qualified Data.ByteString        as B
-import qualified Data.Text.Lazy.Builder as LB
+import qualified Data.ByteString as B
+import qualified Data.Text       as T
 
 -- | Decode a 'ByteString' containing CP 437 encoded text.
 
 decodeCP437 :: ByteString -> Text
-decodeCP437 = toStrict . LB.toLazyText . B.foldl' f mempty
-  where f xs b = xs <> LB.singleton (decodeByteCP437 b)
+decodeCP437 bs = T.unfoldrN
+  (B.length bs)
+  (fmap (first decodeByteCP437) . B.uncons)
+  bs
 
 -- | Decode single byte of CP437 encoded text.
 
