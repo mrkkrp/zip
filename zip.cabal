@@ -31,7 +31,7 @@
 -- POSSIBILITY OF SUCH DAMAGE.
 
 name:                 zip
-version:              0.1.0
+version:              0.1.1
 cabal-version:        >= 1.10
 license:              BSD3
 license-file:         LICENSE.md
@@ -106,7 +106,7 @@ test-suite tests
                     , text             >= 0.2 && < 1.3
                     , time             >= 1.4 && < 1.7
                     , transformers     >= 0.4 && < 0.6
-                    , zip              >= 0.1
+                    , zip              >= 0.1.1
   default-language:   Haskell2010
 
 benchmark bench
@@ -119,7 +119,7 @@ benchmark bench
     ghc-options:      -O2 -Wall
   build-depends:      base             >= 4.8 && < 5
                     , criterion        >= 1.0
-                    , zip              >= 0.1
+                    , zip              >= 0.1.1
   default-language:   Haskell2010
 
 source-repository head
