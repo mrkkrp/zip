@@ -879,7 +879,7 @@ targetEntry DeleteArchiveComment   = Nothing
 -- | Decode 'ByteString'. The first argument indicates whether we should
 -- treat it as UTF-8 (in case bit 11 of general-purpose bit flag is set),
 -- otherwise the function assumes CP437. Note that since not every stream of
--- bytes constitute valid UTF-8 text, this function can fail. In that case
+-- bytes constitutes valid UTF-8 text, this function can fail. In that case
 -- 'Nothing' is returned.
 
 decodeText
