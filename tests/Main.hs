@@ -52,6 +52,7 @@ import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Text (Text)
 import Data.Time
+import Data.Version
 import Path
 import Path.IO
 import System.IO
@@ -84,6 +85,7 @@ main = hspec $ do
     describe "withArchive"        withArchiveSpec
     describe "archive comment"    archiveCommentSpec
     describe "getEntryDesc"       getEntryDescSpec
+    describe "version needed"     versionNeededSpec
     describe "addEntry"           addEntrySpec
     describe "sinkEntry"          sinkEntrySpec
     describe "loadEntry"          loadEntrySpec
@@ -99,7 +101,7 @@ main = hspec $ do
     describe "undoEntryChanges"   undoEntryChangesSpec
     describe "undoArchiveChanges" undoArchiveChangesSpec
     describe "undoAll"            undoAllSpec
-    describe "consistencySpec"    consistencySpec
+    describe "consistency"        consistencySpec
     describe "packDirRecur"       packDirRecurSpec
     describe "unpackInto"         unpackIntoSpec
 
@@ -325,6 +327,19 @@ getEntryDescSpec =
     \path -> property $ \(EM s desc z) -> do
       desc' <- fromJust <$> createArchive path (z >> commit >> getEntryDesc s)
       desc' `shouldSatisfy` softEq desc
+
+versionNeededSpec :: SpecWith (Path Abs File)
+versionNeededSpec =
+  it "writes correct version that is needed to extract archive" $
+    -- NOTE for now we check only how version depends on compression method,
+    -- it should be mentioned that the version also depends on Zip64 feature
+    \path -> property $ \(EM s desc z) -> do
+      desc' <- fromJust <$> createArchive path (z >> commit >> getEntryDesc s)
+      edVersionNeeded desc' `shouldBe` makeVersion
+        (case edCompression desc of
+          Store   -> [2,0]
+          Deflate -> [2,0]
+          BZip2   -> [4,6])
 
 addEntrySpec :: SpecWith (Path Abs File)
 addEntrySpec =

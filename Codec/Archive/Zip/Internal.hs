@@ -151,7 +151,7 @@ data MsDosTime = MsDosTime
 ----------------------------------------------------------------------------
 -- Constants
 
--- | Version to specify when writing archive data. For now it's a constant.
+-- | “Version created by” to specify when writing archive data.
 
 zipVersion :: Version
 zipVersion = Version [4,6] []
@@ -398,7 +398,7 @@ sinkEntry h s o src EditingActions {..} = do
         (GenericOrigin, _)     -> Nothing
         (Borrowed ed, Nothing) -> edComment ed
         (Borrowed _,  Just ()) -> Nothing
-      desc' = EntryDescription -- to write in local header
+      desc0 = EntryDescription -- to write in local header
         { edVersionMadeBy    = zipVersion
         , edVersionNeeded    = zipVersion
         , edCompression      = compression
@@ -409,7 +409,7 @@ sinkEntry h s o src EditingActions {..} = do
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment <|> oldComment
         , edExtraField       = extraField }
-  B.hPut h (runPut (putHeader LocalHeader s desc'))
+  B.hPut h (runPut (putHeader LocalHeader s desc0))
   DataDescriptor {..} <- runResourceT $
     if recompression
       then
@@ -418,22 +418,25 @@ sinkEntry h s o src EditingActions {..} = do
           else src =$= decompressingPipe compressed $$ sinkData h compression
       else src $$ sinkData h Store
   afterStreaming <- hTell h
-  let desc = case o of
-        GenericOrigin -> desc'
+  let desc1 = case o of
+        GenericOrigin -> desc0
           { edCRC32            = ddCRC32
           , edCompressedSize   = ddCompressedSize
           , edUncompressedSize = ddUncompressedSize }
-        Borrowed ed -> desc'
+        Borrowed ed -> desc0
           { edCRC32            =
               bool (edCRC32 ed) ddCRC32 recompression
           , edCompressedSize   =
               bool (edCompressedSize ed) ddCompressedSize recompression
           , edUncompressedSize =
               bool (edUncompressedSize ed) ddUncompressedSize recompression }
+      desc2 = desc1
+        { edVersionNeeded =
+          getZipVersion (needsZip64 desc1) (Just compression) }
   hSeek h AbsoluteSeek offset
-  B.hPut h (runPut (putHeader LocalHeader s desc))
+  B.hPut h (runPut (putHeader LocalHeader s desc2))
   hSeek h AbsoluteSeek afterStreaming
-  return (s, desc)
+  return (s, desc2)
 
 -- | Create 'Sink' to stream data there. Once streaming is finished, return
 -- 'DataDescriptor' for the streamed data. The action /does not/ close given
@@ -521,9 +524,13 @@ getCDHeader = do
   getSignature 0x02014b50 -- central file header signature
   versionMadeBy  <- toVersion <$> getWord16le -- version made by
   versionNeeded  <- toVersion <$> getWord16le -- version needed to extract
+  when (versionNeeded > zipVersion) . fail $
+    "Version required to extract the archive is "
+    ++ showVersion versionNeeded ++ " (can do "
+    ++ showVersion zipVersion ++ ")"
   bitFlag        <- getWord16le -- general purpose bit flag
-  when (any (testBit bitFlag) [0,6,13]) $
-    fail "Encrypted archives are not supported"
+  when (any (testBit bitFlag) [0,6,13]) . fail $
+    "Encrypted archives are not supported"
   let needUnicode = testBit bitFlag 11
   mcompression   <- toCompressionMethod <$> getWord16le -- compression method
   modTime        <- getWord16le -- last mod file time
@@ -688,7 +695,8 @@ putZip64ECD totalCount cdSize cdOffset = do
   putWord32le 0x06064b50 -- zip64 end of central dir signature
   putWord64le 44 -- size of zip64 end of central dir record
   putWord16le (fromVersion zipVersion) -- version made by
-  putWord16le (fromVersion zipVersion) -- version needed to extract
+  putWord16le (fromVersion $ getZipVersion True Nothing)
+  -- ↑ version needed to extract
   putWord32le 0 -- number of this disk
   putWord32le 0 -- number of the disk with the start of the central directory
   putWord64le (fromIntegral totalCount) -- total number of entries (this disk)
@@ -925,6 +933,24 @@ fromCompressionMethod :: CompressionMethod -> Word16
 fromCompressionMethod Store   = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2   = 12
+
+-- | Check if entry with these parameters needs Zip64 extension.
+
+needsZip64 :: EntryDescription -> Bool
+needsZip64 EntryDescription {..} = any (>= 0xffffffff)
+  [edOffset, edCompressedSize, edUncompressedSize]
+
+-- | Determine “version needed to extract” that should be written headers
+-- given need of Zip64 feature and compression method.
+
+getZipVersion :: Bool -> Maybe CompressionMethod -> Version
+getZipVersion zip64 m = max zip64ver mver
+  where zip64ver = makeVersion (if zip64 then [4,5] else [2,0])
+        mver     = makeVersion $ case m of
+          Nothing      -> [2,0]
+          Just Store   -> [2,0]
+          Just Deflate -> [2,0]
+          Just BZip2   -> [4,6]
 
 -- | Return decompressing 'Conduit' corresponding to given compression
 -- method.
