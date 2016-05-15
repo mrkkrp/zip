@@ -786,16 +786,17 @@ locateECD path h = sizeCheck
   where
 
     sizeCheck = do
-      tooSmall <- (< 22) <$> hFileSize h
-      if tooSmall
+      fsize    <- hFileSize h
+      let limit = max 0 (fsize - 0xffff - 22)
+      if fsize < 22
         then return Nothing
-        else hSeek h SeekFromEnd (-22) >> loop
+        else hSeek h SeekFromEnd (-22) >> loop limit
 
-    loop = do
+    loop limit = do
       sig <- getNum getWord32le 4
       pos <- subtract 4 <$> hTell h
-      let again = hSeek h AbsoluteSeek (pos - 1) >> loop
-          done  = pos == 0
+      let again = hSeek h AbsoluteSeek (pos - 1) >> loop limit
+          done  = pos <= limit
       if sig == 0x06054b50
         then do
           result <- checkComment pos >>+ checkCDSig >>+ checkZip64
