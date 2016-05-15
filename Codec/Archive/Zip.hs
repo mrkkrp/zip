@@ -58,6 +58,7 @@ module Codec.Archive.Zip
   , doesEntryExist
   , getEntryDesc
   , getEntry
+  , getEntrySource
   , sourceEntry
   , saveEntry
   , checkEntry
@@ -245,6 +246,20 @@ getEntry
   -> ZipArchive ByteString -- ^ Contents of the entry
 getEntry s = sourceEntry s (CL.foldMap id)
 
+-- | Get entry source.
+--
+-- Throws: 'EntryDoesNotExist'.
+
+getEntrySource
+  :: EntrySelector
+  -> ZipArchive (Source (ResourceT IO) ByteString)
+getEntrySource s = do
+  path  <- getFilePath
+  mdesc <- M.lookup s <$> getEntries
+  case mdesc of
+    Nothing   -> throwM (EntryDoesNotExist path s)
+    Just desc -> return (I.sourceEntry path desc True)
+
 -- | Stream contents of archive entry to specified 'Sink'.
 --
 -- Throws: 'EntryDoesNotExist'.
@@ -257,11 +272,8 @@ sourceEntry
   -> ZipArchive a
      -- ^ Contents of the entry (if found)
 sourceEntry s sink = do
-  path  <- getFilePath
-  mdesc <- M.lookup s <$> getEntries
-  case mdesc of
-    Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> liftIO . runResourceT $ I.sourceEntry path desc True $$ sink
+  src <- getEntrySource s
+  (liftIO . runResourceT) (src $$ sink)
 
 -- | Save specific archive entry as a file in the file system.
 --
