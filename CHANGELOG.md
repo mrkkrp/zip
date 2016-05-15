@@ -1,3 +1,9 @@
+## Zip 0.1.3
+
+* Improved speed of detection of invalid archives.
+
+* Introduced `getEntrySource` function.
+
 ## Zip 0.1.2
 
 * Relaxed dependency on `semigroups`.
