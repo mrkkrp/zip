@@ -31,6 +31,50 @@
 -- actions are performed automatically when you leave the realm of
 -- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
 -- function is your friend. There are even “undo” functions, by the way.
+--
+-- An example of a program that prints list of archive entries:
+--
+-- > import Codec.Archive.Zip
+-- > import Path.IO (resolveFile')
+-- > import System.Environment (getArgs)
+-- > import qualified Data.Map as M
+-- >
+-- > main :: IO ()
+-- > main = do
+-- >   [fp]    <- getArgs
+-- >   path    <- resolveFile' fp
+-- >   entries <- withArchive path (M.keys <$> getEntries)
+-- >   mapM_ print entries
+--
+-- Create a Zip archive with a Hello World file:
+--
+-- > import Codec.Archive.Zip
+-- > import Path (parseRelFile)
+-- > import Path.IO (resolveFile')
+-- > import System.Environment (getArgs)
+-- >
+-- > main :: IO ()
+-- > main = do
+-- >   [fp]    <- getArgs
+-- >   path    <- resolveFile' fp
+-- >   s       <- parseRelFile "hello-world.txt" >>= mkEntrySelector
+-- >   createArchive path (addEntry Store "Hello, World!" s)
+--
+-- Extract contents of specific file and print it:
+--
+-- > import Codec.Archive.Zip
+-- > import Path (parseRelFile)
+-- > import Path.IO (resolveFile')
+-- > import System.Environment (getArgs)
+-- > import qualified Data.ByteString.Char8 as B
+-- >
+-- > main :: IO ()
+-- > main = do
+-- >   [fp,f]  <- getArgs
+-- >   path    <- resolveFile' fp
+-- >   s       <- parseRelFile f >>= mkEntrySelector
+-- >   bs      <- withArchive path (getEntry s)
+-- >   B.putStrLn bs
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
