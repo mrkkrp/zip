@@ -31,6 +31,28 @@
 -- actions are performed automatically when you leave the realm of
 -- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
 -- function is your friend. There are even “undo” functions, by the way.
+--
+-- The following is a simple example of how to use the library to create and
+-- add files to a zip archive:
+--
+-- @
+-- import Codec.Archive.Zip
+-- import Path (parseRelFile)
+--
+-- createZip :: (MonadIO m, MonadCatch m) => FilePath -> m ()
+-- createZip location = zipAction
+--   where path = parseRelFile location
+--         zipAction = do p <- path
+--                        createArchive p (return ())
+--
+-- addFile :: (MonadThrow m, MonadIO m) => FilePath -> ByteString -> FilePath -> m ()
+-- addFile fileLocation contents zipLocation = zipAction
+--   where zipAction = zipPath >>= flip withArchive zipChange
+--         zipChange = entrySel >>= addEntry Store contents
+--         entrySel  = filePath >>= mkEntrySelector
+--         zipPath   = parseRelFile zipLocation
+--         filePath  = parseRelFile fileLocation
+-- @
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
