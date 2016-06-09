@@ -1,3 +1,7 @@
+## Zip 0.1.4
+
+* Added several simple code examples in `Codec.Archive.Zip`.
+
 ## Zip 0.1.3
 
 * Improved speed of detection of invalid archives.
