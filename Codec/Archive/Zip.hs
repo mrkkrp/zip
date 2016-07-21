@@ -293,6 +293,8 @@ getEntry s = sourceEntry s (CL.foldMap id)
 -- | Get entry source.
 --
 -- Throws: 'EntryDoesNotExist'.
+--
+-- @since 0.1.3
 
 getEntrySource
   :: EntrySelector
