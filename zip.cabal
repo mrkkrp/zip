@@ -43,7 +43,7 @@ category:             Codec
 synopsis:             Operations on zip archives
 build-type:           Simple
 description:          Operations on zip archives.
-extra-source-files:   CHANGELOG.md
+extra-doc-files:      CHANGELOG.md
                     , README.md
 
 flag dev
