@@ -96,6 +96,7 @@ module Codec.Archive.Zip
     -- * Archive monad
   , ZipArchive
   , createArchive
+  , createBlindArchive
   , withArchive
     -- * Retrieving information
   , getEntries
@@ -156,6 +157,7 @@ import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as M
 import qualified Data.Sequence              as S
 import qualified Data.Set                   as E
+import System.IO
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -178,7 +180,7 @@ newtype ZipArchive a = ZipArchive
 -- | Internal state record used by the 'ZipArchive' monad.
 
 data ZipState = ZipState
-  { zsFilePath  :: Path Abs File
+  { zsFilePath  :: Either Handle (Path Abs File)
     -- ^ Absolute path to zip archive
   , zsEntries   :: Map EntrySelector EntryDescription
     -- ^ Actual collection of entries
@@ -188,6 +190,46 @@ data ZipState = ZipState
     -- ^ Pending actions
   }
 
+
+
+
+createBlindArchive :: (MonadIO m, MonadCatch m)
+  => Handle    
+  -> ZipArchive a      -- ^ Actions that form archive's content
+  -> m a
+createBlindArchive h m = do
+  let st = ZipState
+        { zsFilePath = Left h
+        , zsEntries  = M.empty
+        , zsArchive  = ArchiveDescription Nothing 0 0
+        , zsActions  = S.empty }
+      action = unZipArchive (liftM2 const m commit)
+  liftIO $ hSetFileSize h 0 -- Truncate the file
+        *> evalStateT action st
+
+
+withBlindArchive :: (MonadIO m, MonadThrow m)
+  => Handle      
+  -> ZipArchive a      -- ^ Actions on that archive
+  -> m a
+withBlindArchive h m = do
+  (desc, entries) <- liftIO (I.scanArchive (Left h))
+  let st = ZipState
+        { zsFilePath = Left h
+        , zsEntries  = entries
+        , zsArchive  = desc
+        , zsActions  = S.empty }
+      action = unZipArchive (liftM2 const m commit)
+  liftIO (evalStateT action st)
+
+
+
+
+
+
+
+
+              
 -- | Create new archive given its location and action that describes how to
 -- create content in the archive. This will silently overwrite specified
 -- file if it already exists. See 'withArchive' if you want to work with
@@ -201,7 +243,7 @@ createArchive path m = do
   apath <- makeAbsolute path
   ignoringAbsence (removeFile apath)
   let st = ZipState
-        { zsFilePath = apath
+        { zsFilePath = Right apath
         , zsEntries  = M.empty
         , zsArchive  = ArchiveDescription Nothing 0 0
         , zsActions  = S.empty }
@@ -239,9 +281,9 @@ withArchive :: (MonadIO m, MonadThrow m)
   -> m a
 withArchive path m = do
   apath           <- canonicalizePath path
-  (desc, entries) <- liftIO (I.scanArchive apath)
+  (desc, entries) <- liftIO (I.scanArchive (Right apath))
   let st = ZipState
-        { zsFilePath = apath
+        { zsFilePath = Right apath
         , zsEntries  = entries
         , zsArchive  = desc
         , zsActions  = S.empty }
@@ -300,11 +342,18 @@ getEntrySource
   :: EntrySelector
   -> ZipArchive (Source (ResourceT IO) ByteString)
 getEntrySource s = do
-  path  <- getFilePath
-  mdesc <- M.lookup s <$> getEntries
-  case mdesc of
-    Nothing   -> throwM (EntryDoesNotExist path s)
-    Just desc -> return (I.sourceEntry path desc True)
+  given  <- getFilePath
+  case given of
+    Left _ ->  do
+      mdesc <- M.lookup s <$> getEntries
+      case mdesc of
+        Nothing   -> throwM (EntryDoesNotExist I.blindPath s)
+        Just desc -> return (I.sourceEntry I.blindPath desc True)
+    Right path -> do
+      mdesc <- M.lookup s <$> getEntries
+      case mdesc of
+        Nothing   -> throwM (EntryDoesNotExist path s)
+        Just desc -> return (I.sourceEntry path desc True)
 
 -- | Stream contents of archive entry to specified 'Sink'.
 --
@@ -545,18 +594,20 @@ undoAll = modifyActions (const S.empty)
 
 commit :: ZipArchive ()
 commit = do
-  file     <- getFilePath
+  given    <- getFilePath
   odesc    <- getArchiveDescription
   oentries <- getEntries
   actions  <- getPending
-  exists   <- doesFileExist file
+  exists   <- case given of
+                Left _ -> pure True
+                Right file -> doesFileExist file
   unless (S.null actions && exists) $ do
-    liftIO (I.commit file odesc oentries actions)
+    liftIO (I.commit given odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
     -- archive is to scan it again — manual manipulations with descriptions
     -- of entries are too error-prone. We also want to erase all pending
     -- actions because 'I.commit' executes them all by definition.
-    (ndesc, nentries) <- liftIO (I.scanArchive file)
+    (ndesc, nentries) <- liftIO (I.scanArchive given)
     ZipArchive . modify $ \st -> st
       { zsEntries = nentries
       , zsArchive = ndesc
@@ -567,7 +618,7 @@ commit = do
 
 -- | Get path of actual archive file from inside of 'ZipArchive' monad.
 
-getFilePath :: ZipArchive (Path Abs File)
+getFilePath :: ZipArchive (Either Handle (Path Abs File))
 getFilePath = ZipArchive (gets zsFilePath)
 
 -- | Get collection of pending actions.
