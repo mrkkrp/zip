@@ -9,10 +9,11 @@
 --
 -- Low-level, non-public concepts and operations.
 
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
 
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
+  , blindPath
   , targetEntry
   , scanArchive
   , sourceEntry
@@ -57,6 +58,9 @@ import qualified Data.Sequence       as S
 import qualified Data.Set            as E
 import qualified Data.Text           as T
 import qualified Data.Text.Encoding  as T
+
+blindPath :: Path Abs File    
+blindPath = $(mkAbsFile "/blindPath")
 
 ----------------------------------------------------------------------------
 -- Data types
@@ -185,9 +189,16 @@ zipVersion = Version [4,6] []
 -- library.
 
 scanArchive
-  :: Path Abs File     -- ^ Path to archive to scan
+  :: Either Handle (Path Abs File)     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
-scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
+scanArchive (Right path) = withFile (toFilePath path) ReadMode $ __scanArchive path
+scanArchive (Left h) = __scanArchive blindPath h
+
+__scanArchive
+  :: Path Abs File     -- ^ Path to archive to scan
+  -> Handle
+  -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
+__scanArchive path h = do
   mecdOffset <- locateECD path h
   case mecdOffset of
     Just ecdOffset -> do
@@ -204,13 +215,15 @@ scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
             Right cd  -> return (ecd, cd)
     Nothing ->
       throwM (ParsingFailed path "Cannot locate end of central directory")
+  
 
+             
 -- | Given location of archive and information about specific archive entry
 -- 'EntryDescription', return 'Source' of its data. Actual data can be
 -- compressed or uncompressed depending on the third argument.
 
 sourceEntry
-  :: Path Abs File     -- ^ Path to archive that contains the entry
+  :: Path Abs File  -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Bool              -- ^ Should we stream uncompressed data?
   -> Source (ResourceT IO) ByteString -- ^ Source of uncompressed data
@@ -235,18 +248,18 @@ sourceEntry path EntryDescription {..} d =
 -- in one pass, and then they are performed in the most efficient way.
 
 commit
-  :: Path Abs File     -- ^ Location of archive file to edit or create
+  :: Either Handle (Path Abs File)     -- ^ Location of archive file to edit or create
   -> ArchiveDescription -- ^ Archive description
   -> Map EntrySelector EntryDescription -- ^ Current list of entires
   -> Seq PendingAction -- ^ Collection of pending actions
   -> IO ()
-commit path ArchiveDescription {..} entries xs =
+commit given@(Right path) ArchiveDescription {..} entries xs =
   withNewFile (overrideIfExists      <>
                nameTemplate ".zip"   <>
                tempDir (parent path) <>
                moveByRenaming) path $ \temp -> do
     let (ProducingActions coping sinking, editing) =
-          optimize (toRecreatingActions path entries >< xs)
+          optimize (toRecreatingActions given entries >< xs)
         comment = predictComment adComment xs
     withFile (toFilePath temp) WriteMode $ \h -> do
       copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
@@ -255,6 +268,16 @@ commit path ArchiveDescription {..} entries xs =
       sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
         sinkEntry h selector GenericOrigin (sinking ! selector) editing)
       writeCD h comment (copiedCD `M.union` sunkCD)
+commit given@(Left h) ArchiveDescription {..} entries xs = do
+    let (ProducingActions coping sinking, editing) =
+          optimize (toRecreatingActions given entries >< xs)
+        comment = predictComment adComment xs
+    copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
+      copyEntries h srcPath (coping ! srcPath) editing)
+    let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
+    sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
+      sinkEntry h selector GenericOrigin (sinking ! selector) editing)
+    writeCD h comment (copiedCD `M.union` sunkCD)
 
 -- | Determine what comment in new archive will look like given its original
 -- value and collection of pending actions.
@@ -271,12 +294,16 @@ predictComment original xs =
 -- that re-create those entires.
 
 toRecreatingActions
-  :: Path Abs File     -- ^ Name of archive file where entires are found
+  :: Either Handle (Path Abs File)     -- ^ Name of archive file where entires are found
   -> Map EntrySelector EntryDescription -- ^ Actual list of entires
   -> Seq PendingAction -- ^ Actions that recreate the archive entries
-toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
+toRecreatingActions (Right path) entries = E.foldl' f S.empty (M.keysSet entries)
   where f s e = s |> CopyEntry path e e
+toRecreatingActions (Left _) entries = E.foldl' f S.empty (M.keysSet entries)
+  where f s e = s |> CopyEntry blindPath e e
 
+
+                
 -- | Transform collection of 'PendingAction's into 'ProducingActions' and
 -- 'EditingActions' — collection of data describing how to create resulting
 -- archive.
@@ -359,7 +386,7 @@ copyEntries
   -> IO (Map EntrySelector EntryDescription)
      -- ^ Info to generate central directory file headers later
 copyEntries h path m e = do
-  entries <- snd <$> scanArchive path
+  entries <- snd <$> scanArchive (Right path)
   done    <- forM (M.keys m) $ \s ->
     case s `M.lookup` entries of
       Nothing -> throwM (EntryDoesNotExist path s)
