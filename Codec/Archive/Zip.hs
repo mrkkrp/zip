@@ -98,6 +98,7 @@ module Codec.Archive.Zip
   , createArchive
   , createBlindArchive
   , withArchive
+  , withBlindArchive
     -- * Retrieving information
   , getEntries
   , doesEntryExist
