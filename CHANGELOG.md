@@ -2,6 +2,15 @@
 
 * Added several simple code examples in `Codec.Archive.Zip`.
 
+* Derived `Typeable`, `Data`, `Generic` for `EntrySelector`.
+
+* Derived `Typeable` for `EntryDescription`.
+
+* Derived `Show`, `Ord`, `Bounded`, `Data`, and `Typeable` for
+  `CompressionMethod`.
+
+* Derived `Read`, `Ord`, `Typeable`, and `Data` for `ArchiveDescription`.
+
 ## Zip 0.1.3
 
 * Improved speed of detection of invalid archives.

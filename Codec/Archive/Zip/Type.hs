@@ -12,6 +12,7 @@
 -- that module instead.
 
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric      #-}
 
 module Codec.Archive.Zip.Type
   ( -- * Entry selector
@@ -34,6 +35,7 @@ import Control.Exception (Exception)
 import Control.Monad.Catch (MonadThrow (..))
 import Data.ByteString (ByteString)
 import Data.CaseInsensitive (CI)
+import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Maybe (mapMaybe, fromJust)
@@ -42,6 +44,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 import Data.Version (Version)
 import Data.Word (Word16, Word32)
+import GHC.Generics (Generic)
 import Numeric.Natural
 import Path
 import qualified Data.ByteString         as B
@@ -75,7 +78,7 @@ import qualified System.FilePath.Windows as Windows
 newtype EntrySelector = EntrySelector
   { unES :: NonEmpty (CI String)
     -- ^ Path pieces of relative path inside archive
-  } deriving (Eq, Ord)
+  } deriving (Eq, Ord, Typeable, Data, Generic)
 
 instance Show EntrySelector where
   show = show . unEntrySelector
@@ -162,7 +165,7 @@ data EntryDescription = EntryDescription
   , edOffset           :: Natural -- ^ Absolute offset of local file header
   , edComment          :: Maybe Text -- ^ Entry comment
   , edExtraField       :: Map Word16 ByteString -- ^ All extra fields found
-  } deriving Eq
+  } deriving (Eq, Typeable)
 
 -- | Supported compression methods.
 
@@ -170,7 +173,7 @@ data CompressionMethod
   = Store              -- ^ Store file uncompressed
   | Deflate            -- ^ Deflate
   | BZip2              -- ^ Compressed using BZip2 algorithm
-    deriving (Eq, Enum, Read, Show)
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Data, Typeable)
 
 ----------------------------------------------------------------------------
 -- Archive description
@@ -181,7 +184,7 @@ data ArchiveDescription = ArchiveDescription
   { adComment  :: Maybe Text -- ^ Comment of entire archive
   , adCDOffset :: Natural -- ^ Absolute offset of start of central directory
   , adCDSize   :: Natural -- ^ Size of central directory record
-  } deriving (Eq, Show)
+  } deriving (Show, Read, Eq, Ord, Typeable, Data)
 
 ----------------------------------------------------------------------------
 -- Exceptions
