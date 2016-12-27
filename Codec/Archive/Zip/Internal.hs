@@ -187,7 +187,7 @@ zipVersion = Version [4,6] []
 scanArchive
   :: Path Abs File     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
-scanArchive path = withFile (toFilePath path) ReadMode $ \h -> do
+scanArchive path = withBinaryFile (toFilePath path) ReadMode $ \h -> do
   mecdOffset <- locateECD path h
   case mecdOffset of
     Just ecdOffset -> do
@@ -248,7 +248,7 @@ commit path ArchiveDescription {..} entries xs =
     let (ProducingActions coping sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
         comment = predictComment adComment xs
-    withFile (toFilePath temp) WriteMode $ \h -> do
+    withBinaryFile (toFilePath temp) WriteMode $ \h -> do
       copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
         copyEntries h srcPath (coping ! srcPath) editing)
       let sinkingKeys = M.keys $ sinking `M.difference` copiedCD

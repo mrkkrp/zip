@@ -1,3 +1,8 @@
+## Zip 0.1.5
+
+* Switched to using `withBinaryFile` instead of `withFile`, because the
+  latter does nasty conversions on Windows, see docs for `openBinaryFile`.
+
 ## Zip 0.1.4
 
 * Added several simple code examples in `Codec.Archive.Zip`.
