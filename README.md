@@ -287,6 +287,6 @@ We are open to pull requests, they will be merged quickly if they are good!
 
 ## License
 
-Copyright © 2016 Mark Karpov
+Copyright © 2016–2017 Mark Karpov
 
 Distributed under BSD 3 clause license.
