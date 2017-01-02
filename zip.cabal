@@ -109,19 +109,6 @@ test-suite tests
                     , zip              >= 0.1.5
   default-language:   Haskell2010
 
-benchmark bench
-  main-is:            Main.hs
-  hs-source-dirs:     bench
-  type:               exitcode-stdio-1.0
-  if flag(dev)
-    ghc-options:      -O2 -Wall -Werror
-  else
-    ghc-options:      -O2 -Wall
-  build-depends:      base             >= 4.8     && < 5.0
-                    , criterion        >= 0.6.2   && < 1.2
-                    , zip              >= 0.1.5
-  default-language:   Haskell2010
-
 source-repository head
   type:               git
   location:           https://github.com/mrkkrp/zip.git
