@@ -1,3 +1,7 @@
+## Zip 0.1.6
+
+* Allowed `time-1.7`.
+
 ## Zip 0.1.5
 
 * Switched to using `withBinaryFile` instead of `withFile`, because the
