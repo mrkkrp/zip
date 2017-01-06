@@ -327,9 +327,14 @@ sourceEntry s sink = do
 
 saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
+  -> Bool              -- ^ Whether to restore modification time
   -> Path b File       -- ^ Where to save the file
   -> ZipArchive ()
-saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
+saveEntry s restoreModTime path = do
+  sourceEntry s (CB.sinkFile (toFilePath path))
+  when restoreModTime $ do
+    med <- getEntryDesc s
+    forM_ med (setModificationTime path . edModTime)
 
 -- | Calculate CRC32 check sum and compare it with value read from
 -- archive. The function returns 'True' when the check sums are the same —
@@ -350,8 +355,11 @@ checkEntry s = do
 -- | Unpack entire archive into specified directory. The directory will be
 -- created if it does not exist.
 
-unpackInto :: Path b Dir -> ZipArchive ()
-unpackInto dir' = do
+unpackInto
+  :: Bool              -- ^ Whether to restore modification time
+  -> Path b Dir        -- ^ Directory to unpack into
+  -> ZipArchive ()
+unpackInto restoreModTime dir' = do
   selectors <- M.keysSet <$> getEntries
   unless (null selectors) $ do
     dir <- liftIO (makeAbsolute dir')
@@ -359,7 +367,7 @@ unpackInto dir' = do
     let dirs = E.map (parent . (dir </>) . unEntrySelector) selectors
     forM_ dirs (liftIO . ensureDir)
     forM_ selectors $ \s ->
-      saveEntry s (dir </> unEntrySelector s)
+      saveEntry s restoreModTime (dir </> unEntrySelector s)
 
 -- | Get archive comment.
 

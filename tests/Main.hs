@@ -365,15 +365,22 @@ sinkEntrySpec =
 loadEntrySpec :: SpecWith (Path Abs File)
 loadEntrySpec =
   context "when an entry is loaded" $
-    it "is there" $ \path -> property $ \m b s -> do
+    it "is there" $ \path -> property $ \m b s r -> do
       let vpath = deriveVacant path
       B.writeFile (toFilePath vpath) b
+      let date19810101 = UTCTime (toEnum 44605) 0
+      setModificationTime vpath date19810101
       createArchive path $ do
         loadEntry m (const $ return s) vpath
         commit
         liftIO (removeFile vpath)
-        saveEntry s vpath
+        saveEntry s r vpath
       B.readFile (toFilePath vpath) `shouldReturn` b
+      newModTime <- getModificationTime vpath
+      if r then
+        newModTime `shouldBe` date19810101
+      else
+        newModTime `shouldNotBe` date19810101
 
 copyEntrySpec :: SpecWith (Path Abs File)
 copyEntrySpec =
@@ -665,7 +672,7 @@ unpackIntoSpec =
         z
         commit
         catchIOError
-          (unpackInto dir >> return False)
+          (unpackInto False dir >> return False)
           (const $ return True)
       when blew discard -- TODO
       removeFile path

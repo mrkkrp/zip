@@ -1,3 +1,5 @@
 resolver: lts-7.14
 packages:
 - '.'
+extra-deps:
+- path-io-1.2.2
