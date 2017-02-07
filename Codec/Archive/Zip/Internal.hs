@@ -9,6 +9,7 @@
 --
 -- Low-level, non-public concepts and operations.
 
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Codec.Archive.Zip.Internal
@@ -481,9 +482,14 @@ writeCD h comment m = do
   B.hPut h cd -- write central directory
   let totalCount = M.size m
       cdSize     = B.length cd
-      needZip64  = totalCount >= 0xffff
+      needZip64  =
+#ifdef USE_ZIP64_ECD
+        True
+#else
+        totalCount  >= 0xffff
         || cdSize   >= 0xffffffff
         || cdOffset >= 0xffffffff
+#endif
   when needZip64 $ do
     zip64ecdOffset <- hTell h
     B.hPut h . runPut $ putZip64ECD totalCount cdSize cdOffset

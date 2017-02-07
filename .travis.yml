@@ -24,9 +24,15 @@ install:
  - cabal install --only-dependencies --enable-tests
 
 script:
+ # test with zip64 ecd
+ - cabal configure --enable-tests -v2 -f dev -f zip64-ecd
+ - cabal build
+ - travis_wait 20 cabal test --show-details=always
+ # test with automatic detection of ecd (that is, no zip64 is most cases)
  - cabal configure --enable-tests --enable-coverage -v2 -f dev
  - cabal build
  - travis_wait 20 cabal test --show-details=always
+ # contiue as usual
  - cabal sdist
  - cabal haddock | grep "100%" | wc -l | grep "4"
 
