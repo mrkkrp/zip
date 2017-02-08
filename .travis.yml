@@ -28,7 +28,7 @@ script:
  - cabal configure --enable-tests -v2 -f dev -f zip64-ecd
  - cabal build
  - travis_wait 20 cabal test --show-details=always
- # test with automatic detection of ecd (that is, no zip64 is most cases)
+ # test with automatic detection of ecd (that is, no zip64 in most cases)
  - cabal configure --enable-tests --enable-coverage -v2 -f dev
  - cabal build
  - travis_wait 20 cabal test --show-details=always
