@@ -2,6 +2,10 @@
 
 * Allowed `time-1.7`.
 
+* Fixed an issue when empty archives with Zip 64 feature enabled could not
+  be read (the “Parsing of archive structure failed: Cannot locate end of
+  central directory”).
+
 ## Zip 0.1.5
 
 * Switched to using `withBinaryFile` instead of `withFile`, because the
