@@ -827,7 +827,12 @@ locateECD path h = sizeCheck
         else do
           hSeek h AbsoluteSeek sigPos
           cdSig  <- getNum getWord32le 4
-          return $ if cdSig == 0x02014b50 || cdSig == 0x06054b50
+          return $ if cdSig == 0x02014b50 ||
+            -- ↑ normal case: central directory file header signature
+                      cdSig == 0x06064b50 ||
+            -- ↑ happens when zip 64 archive is empty
+                      cdSig == 0x06054b50
+            -- ↑ happens when vanilla archive is empty
             then Just pos
             else Nothing
 
