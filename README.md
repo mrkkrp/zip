@@ -92,7 +92,7 @@ are reported on its issue tracker. It also does not appear to be maintained
 The library supports all features specified in modern .ZIP specification
 except for encryption and multi-disk archives. See more about this below.
 
-For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
+For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT).
 
 ### Compression methods
 
