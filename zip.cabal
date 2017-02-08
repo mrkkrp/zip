@@ -89,7 +89,7 @@ library
   else
     ghc-options:      -O2 -Wall
   if flag(zip64-ecd)
-    ghc-options:      -DUSE_ZIP64_ECD
+    cpp-options:      -DUSE_ZIP64_ECD
   default-language:   Haskell2010
 
 test-suite tests
@@ -101,7 +101,7 @@ test-suite tests
   else
     ghc-options:      -O2 -Wall
   if flag(zip64-ecd)
-    ghc-options:      -DUSE_ZIP64_ECD
+    cpp-options:      -DUSE_ZIP64_ECD
   build-depends:      base             >= 4.8     && < 5.0
                     , bytestring       >= 0.9     && < 0.11
                     , conduit          >= 1.1     && < 2.0
