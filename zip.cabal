@@ -53,7 +53,7 @@ flag dev
 
 flag zip64-ecd
   description:        Unconditionally use Zip64 ECD format.
-  manaul:             True
+  manual:             True
   default:            False
 
 library
