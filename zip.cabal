@@ -51,11 +51,6 @@ flag dev
   manual:             True
   default:            False
 
-flag zip64-ecd
-  description:        Unconditionally use Zip64 ECD format.
-  manual:             True
-  default:            False
-
 library
   build-depends:      base             >= 4.8     && < 5.0
                     , bytestring       >= 0.9     && < 0.11
@@ -88,8 +83,6 @@ library
     ghc-options:      -Wall -Werror
   else
     ghc-options:      -O2 -Wall
-  if flag(zip64-ecd)
-    cpp-options:      -DUSE_ZIP64_ECD
   default-language:   Haskell2010
 
 test-suite tests
@@ -100,8 +93,6 @@ test-suite tests
     ghc-options:      -Wall -Werror
   else
     ghc-options:      -O2 -Wall
-  if flag(zip64-ecd)
-    cpp-options:      -DUSE_ZIP64_ECD
   build-depends:      base             >= 4.8     && < 5.0
                     , bytestring       >= 0.9     && < 0.11
                     , conduit          >= 1.1     && < 2.0

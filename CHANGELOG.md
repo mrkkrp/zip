@@ -1,3 +1,7 @@
+## Zip 0.1.7
+
+* Fix literal overflows on 32 bit systems.
+
 ## Zip 0.1.6
 
 * Allowed `time-1.7`.
