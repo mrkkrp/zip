@@ -478,23 +478,23 @@ writeCD
   -> IO ()
 writeCD h comment m = do
   let cd = runPut (putCD m)
-  cdOffset <- hTell h
+  cdOffset <- fromIntegral <$> hTell h
   B.hPut h cd -- write central directory
-  let totalCount = M.size m
-      cdSize     = B.length cd
+  let totalCount = fromIntegral (M.size m)
+      cdSize     = fromIntegral (B.length cd)
       needZip64  =
 #ifdef USE_ZIP64_ECD
         True
 #else
-        totalCount  >= 0xffff
-        || cdSize   >= 0xffffffff
-        || cdOffset >= 0xffffffff
+        totalCount  >= ffff
+        || cdSize   >= ffffffff
+        || cdOffset >= ffffffff
 #endif
   when needZip64 $ do
-    zip64ecdOffset <- hTell h
-    B.hPut h . runPut $ putZip64ECD totalCount cdSize cdOffset
-    B.hPut h . runPut $ putZip64ECDLocator zip64ecdOffset
-  B.hPut h . runPut $ putECD totalCount cdSize cdOffset comment
+    zip64ecdOffset <- fromIntegral <$> hTell h
+    (B.hPut h . runPut) (putZip64ECD totalCount cdSize cdOffset)
+    (B.hPut h . runPut) (putZip64ECDLocator zip64ecdOffset)
+  (B.hPut h . runPut) (putECD totalCount cdSize cdOffset comment)
 
 ----------------------------------------------------------------------------
 -- Binary serialization
@@ -606,7 +606,7 @@ parseZip64ExtraField
   -> Zip64ExtraField   -- ^ Result
 parseZip64ExtraField dflt@Zip64ExtraField {..} b =
   either (const dflt) id . flip runGet b $ do
-    let ifsat v = if v >= 0xffffffff
+    let ifsat v = if v >= ffffffff
           then fromIntegral <$> getWord64le
           else return v
     uncompressed <- ifsat z64efUncompressedSize -- uncompressed size
@@ -621,11 +621,11 @@ makeZip64ExtraField
   -> Zip64ExtraField   -- ^ Zip64 extra field's data
   -> ByteString        -- ^ Resulting representation
 makeZip64ExtraField c Zip64ExtraField {..} = runPut $ do
-  when (c == LocalHeader || z64efUncompressedSize >= 0xffffffff) $
+  when (c == LocalHeader || z64efUncompressedSize >= ffffffff) $
     putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
-  when (c == LocalHeader || z64efCompressedSize >= 0xffffffff) $
+  when (c == LocalHeader || z64efCompressedSize >= ffffffff) $
     putWord64le (fromIntegral z64efCompressedSize) -- compressed size
-  when (c == CentralDirHeader && z64efOffset >= 0xffffffff) $
+  when (c == CentralDirHeader && z64efOffset >= ffffffff) $
     putWord64le (fromIntegral z64efOffset) -- offset of local file header
 
 -- | Create 'ByteString' representing an extra field.
@@ -693,9 +693,9 @@ putHeader c' s EntryDescription {..} = do
 -- | Create 'ByteString' representing Zip64 end of central directory record.
 
 putZip64ECD
-  :: Int               -- ^ Total number of entries
-  -> Int               -- ^ Size of the central directory
-  -> Integer           -- ^ Offset of central directory record
+  :: Natural           -- ^ Total number of entries
+  -> Natural           -- ^ Size of the central directory
+  -> Natural           -- ^ Offset of central directory record
   -> Put
 putZip64ECD totalCount cdSize cdOffset = do
   putWord32le 0x06064b50 -- zip64 end of central dir signature
@@ -714,7 +714,7 @@ putZip64ECD totalCount cdSize cdOffset = do
 -- locator.
 
 putZip64ECDLocator
-  :: Integer           -- ^ Offset of Zip64 end of central directory
+  :: Natural           -- ^ Offset of Zip64 end of central directory
   -> Put
 putZip64ECDLocator ecdOffset = do
   putWord32le 0x07064b50 -- zip64 end of central dir locator signature
@@ -766,9 +766,9 @@ getECD = do
 -- | Create 'ByteString' representing end of central directory record.
 
 putECD
-  :: Int               -- ^ Total number of entries
-  -> Int               -- ^ Size of the central directory
-  -> Integer           -- ^ Offset of central directory record
+  :: Natural           -- ^ Total number of entries
+  -> Natural           -- ^ Size of the central directory
+  -> Natural           -- ^ Offset of central directory record
   -> Maybe Text        -- ^ Zip file comment
   -> Put
 putECD totalCount cdSize cdOffset mcomment = do
@@ -876,7 +876,7 @@ renameKey ok nk m = case M.lookup ok m of
 
 withSaturation :: forall a b. (Integral a, Integral b, Bounded b) => a -> b
 withSaturation x =
-  if x > fromIntegral (maxBound :: b)
+  if fromIntegral x > (maxBound :: b)
     then maxBound :: b
     else fromIntegral x
 
@@ -949,7 +949,7 @@ fromCompressionMethod BZip2   = 12
 -- | Check if entry with these parameters needs Zip64 extension.
 
 needsZip64 :: EntryDescription -> Bool
-needsZip64 EntryDescription {..} = any (>= 0xffffffff)
+needsZip64 EntryDescription {..} = any (>= ffffffff)
   [edOffset, edCompressedSize, edUncompressedSize]
 
 -- | Determine “version needed to extract” that should be written headers
@@ -1009,3 +1009,10 @@ fromMsDosTime MsDosTime {..} = UTCTime
     day     = fromIntegral (msDosDate .&. 0x1f)
     month   = fromIntegral $ shiftR msDosDate 5 .&. 0x0f
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
+
+-- | We use the constants of type 'Natural' instead of literals to protect
+-- ourselves from overflows on 32 bit systems.
+
+ffff, ffffffff :: Natural
+ffff     = 0xffff
+ffffffff = 0xffffffff
