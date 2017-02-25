@@ -871,9 +871,10 @@ renameKey ok nk m = case M.lookup ok m of
 
 withSaturation :: forall a b. (Integral a, Integral b, Bounded b) => a -> b
 withSaturation x =
-  if fromIntegral x > (maxBound :: b)
-    then maxBound :: b
+  if (fromIntegral x :: Integer) > (fromIntegral bound :: Integer)
+    then bound
     else fromIntegral x
+  where bound = maxBound :: b
 
 -- | Determine target entry of action.
 
