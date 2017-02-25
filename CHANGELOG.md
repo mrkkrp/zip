@@ -1,3 +1,8 @@
+## Zip 0.1.8
+
+* Fixed a bug that caused `zip` to write incorrect number of entries
+  (instead of `0xffff`) in central directory when Zip64 feature is enabled.
+
 ## Zip 0.1.7
 
 * Fix literal overflows on 32 bit systems.
