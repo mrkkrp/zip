@@ -33,6 +33,7 @@ import Data.Char (ord)
 import Data.Conduit (Conduit, Source, Sink, (=$=), ($$), awaitForever, yield)
 import Data.Conduit.Internal (zipSinks)
 import Data.Digest.CRC32 (crc32Update)
+import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
 import Data.Maybe (fromJust, catMaybes, isNothing)
@@ -983,7 +984,9 @@ toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
     dosTime = fromIntegral (seconds + shiftL minutes 5 + shiftL hours 11)
     dosDate = fromIntegral (day     + shiftL month   5 + shiftL year  9)
 
-    seconds = fromEnum (todSec tod) `quot` 2000000000000
+    seconds =
+      let (MkFixed x) = todSec tod
+      in fromIntegral (x `quot` 2000000000000)
     minutes = todMin tod
     hours   = todHour tod
     tod     = timeToTimeOfDay utctDayTime
