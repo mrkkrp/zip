@@ -1,3 +1,7 @@
+## Zip 0.1.9
+
+* Fixed a bug with modification time serialization on 32 bit systems.
+
 ## Zip 0.1.8
 
 * Fixed a bug that caused `zip` to write incorrect number of entries
