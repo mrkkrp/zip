@@ -140,7 +140,7 @@ import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Resource (ResourceT, runResourceT)
+import Control.Monad.Trans.Resource (ResourceT, runResourceT, MonadResource)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink, ($$), yield)
 import Data.Map.Strict (Map, (!))
@@ -297,8 +297,9 @@ getEntry s = sourceEntry s (CL.foldMap id)
 -- @since 0.1.3
 
 getEntrySource
-  :: EntrySelector
-  -> ZipArchive (Source (ResourceT IO) ByteString)
+  :: MonadResource m
+  => EntrySelector
+  -> ZipArchive (Source m ByteString)
 getEntrySource s = do
   path  <- getFilePath
   mdesc <- M.lookup s <$> getEntries

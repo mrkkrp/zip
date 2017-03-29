@@ -25,7 +25,7 @@ import Codec.Archive.Zip.Type
 import Control.Applicative (many, (<|>))
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.Trans.Resource (ResourceT, runResourceT)
+import Control.Monad.Trans.Resource (ResourceT, runResourceT, MonadResource)
 import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
@@ -211,10 +211,11 @@ scanArchive path = withBinaryFile (toFilePath path) ReadMode $ \h -> do
 -- compressed or uncompressed depending on the third argument.
 
 sourceEntry
-  :: Path Abs File     -- ^ Path to archive that contains the entry
+  :: MonadResource m
+  => Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Bool              -- ^ Should we stream uncompressed data?
-  -> Source (ResourceT IO) ByteString -- ^ Source of uncompressed data
+  -> Source m ByteString -- ^ Source of uncompressed data
 sourceEntry path EntryDescription {..} d =
   source =$= CB.isolate (fromIntegral edCompressedSize) =$= decompress
   where
@@ -965,8 +966,9 @@ getZipVersion zip64 m = max zip64ver mver
 -- method.
 
 decompressingPipe
-  :: CompressionMethod
-  -> Conduit ByteString (ResourceT IO) ByteString
+  :: MonadResource m
+  => CompressionMethod
+  -> Conduit ByteString m ByteString
 decompressingPipe Store   = awaitForever yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 decompressingPipe BZip2   = BZ.bunzip2
