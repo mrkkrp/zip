@@ -109,7 +109,7 @@ data EditingActions = EditingActions
   , eaExtraField    :: Map EntrySelector (Map Word16 ByteString)
   , eaDeleteField   :: Map EntrySelector (Map Word16 ()) }
 
--- | Origins of entries that can be streamed into archive.
+-- | Origin of entries that can be streamed into archive.
 
 data EntryOrigin
   = GenericOrigin
@@ -160,8 +160,8 @@ zipVersion = Version [4,6] []
 ----------------------------------------------------------------------------
 -- Higher-level operations
 
--- | Scan central directory of an archive and return its description
--- 'ArchiveDescription' as well as collection of its entries.
+-- | Scan the central directory of an archive and return its description
+-- 'ArchiveDescription' as well as a collection of its entries.
 --
 -- This operation may fail with:
 --
@@ -177,13 +177,13 @@ zipVersion = Version [4,6] []
 --     cannot parse (this includes multi-disk archives, for example).
 --
 -- Please note that entries with invalid (non-portable) file names may be
--- missing in list of entries. Files that are compressed with unsupported
--- compression methods are skipped as well. Also, if several entries would
--- collide on some operating systems (such as Windows, because of its
--- case-insensitivity), only one of them will be available, because
--- 'EntrySelector' is case-insensitive. These are consequences of the design
--- decision to make it impossible to create non-portable archives with this
--- library.
+-- missing in the list of entries. Files that are compressed with
+-- unsupported compression methods are skipped as well. Also, if several
+-- entries would collide on some operating systems (such as Windows, because
+-- of its case-insensitivity), only one of them will be available, because
+-- 'EntrySelector' is case-insensitive. These are the consequences of the
+-- design decision to make it impossible to create non-portable archives
+-- with this library.
 
 scanArchive
   :: Path Abs File     -- ^ Path to archive to scan
@@ -259,7 +259,7 @@ commit path ArchiveDescription {..} entries xs =
       writeCD h comment (copiedCD `M.union` sunkCD)
 
 -- | Determine what comment in new archive will look like given its original
--- value and collection of pending actions.
+-- value and a collection of pending actions.
 
 predictComment :: Maybe Text -> Seq PendingAction -> Maybe Text
 predictComment original xs =
@@ -269,19 +269,18 @@ predictComment original xs =
     Just (SetArchiveComment txt) -> Just txt
     Just _                       -> Nothing
 
--- | Transform map representing existing entries into collection of actions
--- that re-create those entires.
+-- | Transform a map representing existing entries into a collection of
+-- actions that re-create those entires.
 
 toRecreatingActions
-  :: Path Abs File     -- ^ Name of archive file where entires are found
+  :: Path Abs File     -- ^ Name of the archive file where entires are found
   -> Map EntrySelector EntryDescription -- ^ Actual list of entires
   -> Seq PendingAction -- ^ Actions that recreate the archive entries
 toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
   where f s e = s |> CopyEntry path e e
 
--- | Transform collection of 'PendingAction's into 'ProducingActions' and
--- 'EditingActions' — collection of data describing how to create resulting
--- archive.
+-- | Transform a collection of 'PendingAction's into 'ProducingActions' and
+-- 'EditingActions' — data that describes how to create resulting archive.
 
 optimize
   :: Seq PendingAction -- ^ Collection of pending actions
@@ -348,8 +347,8 @@ optimize = foldl' f
       if M.null n then Nothing else Just n
     er _ Nothing    = Nothing
 
--- | Copy entries from another archive and write them into file associated
--- with given handle. This actually can throw 'EntryDoesNotExist' if there
+-- | Copy entries from another archive and write them into the file
+-- associated with given handle. This can throw 'EntryDoesNotExist' if there
 -- is no such entry in that archive.
 
 copyEntries
@@ -369,7 +368,8 @@ copyEntries h path m e = do
         (sourceEntry path desc False) e
   return (M.fromList done)
 
--- | Sink entry from given stream into file associated with given 'Handle'.
+-- | Sink entry from given stream into the file associated with given
+-- 'Handle'.
 
 sinkEntry
   :: Handle            -- ^ Opened 'Handle' of zip archive file
@@ -467,9 +467,9 @@ sinkData h compression = do
     , ddUncompressedSize = uncompressedSize }
 
 -- | Append central directory entries and end of central directory record to
--- file that given 'Handle' is associated with. Note that this automatically
--- writes Zip64 end of central directory record and Zip64 end of central
--- directory locator when necessary.
+-- the file that given 'Handle' is associated with. Note that this
+-- automatically writes Zip64 end of central directory record and Zip64 end
+-- of central directory locator when necessary.
 
 writeCD
   :: Handle            -- ^ Opened handle of zip archive file
@@ -496,8 +496,8 @@ writeCD h comment m = do
 ----------------------------------------------------------------------------
 -- Binary serialization
 
--- | Extract number of bytes between start of file name in local header and
--- start of actual data.
+-- | Extract the number of bytes between start of file name in local header
+-- and start of actual data.
 
 getLocalHeaderGap :: Get Integer
 getLocalHeaderGap = do
@@ -519,8 +519,9 @@ getLocalHeaderGap = do
 getCD :: Get (Map EntrySelector EntryDescription)
 getCD = M.fromList . catMaybes <$> many getCDHeader
 
--- | Parse single central directory file header. If it's a directory or file
--- compressed with unsupported compression method, 'Nothing' is returned.
+-- | Parse a single central directory file header. If it's a directory or
+-- file compressed with unsupported compression method, 'Nothing' is
+-- returned.
 
 getCDHeader :: Get (Maybe (EntrySelector, EntryDescription))
 getCDHeader = do
@@ -586,8 +587,8 @@ getExtraField = do
   body   <- getBytes (fromIntegral size) -- content
   return (header, body)
 
--- | Get signature. If extracted data is not equal to provided signature,
--- fail.
+-- | Get signature. If the extracted data is not equal to provided
+-- signature, fail.
 
 getSignature :: Word32 -> Get ()
 getSignature sig = do
@@ -861,7 +862,7 @@ infixl 1 >>+
 (>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
 a >>+ b = a >>= maybe (return Nothing) b
 
--- | Rename entry (key) in a 'Map'.
+-- | Rename an entry (key) in a 'Map'.
 
 renameKey :: Ord k => k -> k -> Map k a -> Map k a
 renameKey ok nk m = case M.lookup ok m of
@@ -944,13 +945,13 @@ fromCompressionMethod Store   = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2   = 12
 
--- | Check if entry with these parameters needs Zip64 extension.
+-- | Check if an entry with these parameters needs Zip64 extension.
 
 needsZip64 :: EntryDescription -> Bool
 needsZip64 EntryDescription {..} = any (>= ffffffff)
   [edOffset, edCompressedSize, edUncompressedSize]
 
--- | Determine “version needed to extract” that should be written headers
+-- | Determine “version needed to extract” that should be written to headers
 -- given need of Zip64 feature and compression method.
 
 getZipVersion :: Bool -> Maybe CompressionMethod -> Version
@@ -962,7 +963,7 @@ getZipVersion zip64 m = max zip64ver mver
           Just Deflate -> [2,0]
           Just BZip2   -> [4,6]
 
--- | Return decompressing 'Conduit' corresponding to given compression
+-- | Return decompressing 'Conduit' corresponding to the given compression
 -- method.
 
 decompressingPipe

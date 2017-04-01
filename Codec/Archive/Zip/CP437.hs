@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- Support for decoding of CP437 text.
+-- Support for decoding of CP 437 text.
 
 module Codec.Archive.Zip.CP437
   ( decodeCP437 )
@@ -29,7 +29,7 @@ decodeCP437 bs = T.unfoldrN
   (fmap (first decodeByteCP437) . B.uncons)
   bs
 
--- | Decode single byte of CP437 encoded text.
+-- | Decode a single byte of CP437 encoded text.
 
 decodeByteCP437 :: Word8 -> Char
 decodeByteCP437 byte = chr $ case byte of

@@ -32,11 +32,11 @@ terms of feature-set with libraries like `libzip` in C.
 ## Why this library is written
 
 There are a few libraries to work with Zip archives, yet every one of them
-provides only subset of all functionality user may need (obviously the
-libraries provide functionality that their authors needed) and otherwise is
-flawed in some way so it cannot be easily used in some situations. Let's
-examine all libraries available on Hackage to understand motivation for this
-package.
+provides only a subset of all the functionality a user may need (obviously
+the libraries provide functionality that their authors needed) and otherwise
+is flawed in some way so it cannot be easily used in some situations. Let's
+examine all the libraries available on Hackage to understand motivation for
+this package.
 
 ### zip-archive
 
@@ -45,20 +45,20 @@ simple to use. However it creates Zip archives purely, as `ByteStrings`s in
 memory that you can then write to the file system. This is not acceptable if
 you work with more-or-less big data. For example, if you have collection of
 files with total size of 500 MB and you want to pack them into an archive,
-you can easily consume up to 1 GB of memory (files plus resulting
+you can easily consume up to 1 GB of memory (the files plus resulting
 archive). Not always you can afford to do this or do this at scale. Even if
 you want just to look at list of archive entries it will read it into memory
 in all its entirety. For my use-case it's not acceptable.
 
 ### LibZip
 
-This is bindings to C library
-[`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always certain
-kind of trouble when you are using bindings. For example, you need to take
-care that target library is installed and its version is compatible with
-version of your binding. Yes, this means additional headaches. It should be
-just “plug and play” (if you're using Stack), but now you need to watch out
-for compatibility.
+This is a binding to C
+library [`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always
+certain kind of trouble when you are using bindings. For example, you need
+to take care that target library is installed and its version is compatible
+with the version of your binding. Yes, this means additional headaches. It
+should be just “plug and play”, but now you need to watch out for
+compatibility.
 
 It's not that bad with libraries that do not break their API for years, but
 it's not the case with `libzip`. As maintainer of `LibZip` puts it:
@@ -69,9 +69,9 @@ it's not the case with `libzip`. As maintainer of `LibZip` puts it:
 
 Now, on my machine I have version 1.0. To put the package on Stackage we had
 to use version 0.10, because Stackage uses Ubuntu to build packages and
-libraries on Ubuntu are always ancient. This means that I cannot use version
-of the library from Stackage, and I don't yet know what will be on the
-server.
+libraries on Ubuntu are always ancient. This means that I cannot use the
+version of the library from Stackage, and I don't yet know what will be on
+the server.
 
 After much frustration with all these things I decided to avoid using of
 `LibZip`, because after all, this is not that sort of project that shouldn't
@@ -80,16 +80,16 @@ safer to use.
 
 ### zip-conduit
 
-This one uses the right approach: leverage good streaming library
+This one uses the right approach: leverage a good streaming library
 (`conduit`) for memory-efficient processing. This is however is not
 feature-rich and has certain problems (including programming style, it uses
 `error` if an entry is missing in archive, among other things), some of them
 are reported on its issue tracker. It also does not appear to be maintained
-(last sign of activity was on December 23, 2014).
+(the last sign of activity was on December 23, 2014).
 
 ## Features
 
-The library supports all features specified in modern .ZIP specification
+The library supports all features specified in the modern .ZIP specification
 except for encryption and multi-disk archives. See more about this below.
 
 For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT).
@@ -104,8 +104,8 @@ For reference, here is a [copy of the specification](https://pkware.cachefly.net
 
 The best way to add new compression method to the library is to write
 conduit that will do the compression and publish it as a library. `zip` can
-then depend on it and add it to the list of supported compression
-methods. Current list of compression methods reflects what is available on
+then depend on it and add it to the list of supported compression methods.
+The current list of compression methods reflects what is available on
 Hackage at the moment.
 
 ### Encryption
@@ -129,8 +129,8 @@ how to get extracted data. The following methods are supported:
 
 * *ByteString.* Use it only with small data.
 
-* *Copy file from another archive.* Efficient operation, file is copied “as
-  is” — no re-compression is performed.
+* *Copy file from another archive.* An efficient operation, file is copied
+  “as is” — no re-compression is performed.
 
 ### ZIP64
 
@@ -166,17 +166,17 @@ archive.
 
 ## Quick start
 
-The module `Codec.Archive.Zip` provides everything you need to manipulate
-Zip archives. There are three things that should be clarified right away, to
-avoid confusion in the future.
+The module `Codec.Archive.Zip` provides everything you may need to
+manipulate Zip archives. There are three things that should be clarified
+right away, to avoid confusion in the future.
 
 First, we use `EntrySelector` type that can be obtained from `Path Rel File`
 paths. This method may seem awkward at first, but it will protect you from
 problems with portability when your archive is unpacked on a different
 platform. Using of well-typed paths is also something you should consider
-doing in your projects anyway. Even if you don't want to use `Path` module
-in your project, it's easy to marshal `FilePath` to `Path` just before using
-functions from the library.
+doing in your projects anyway. Even if you don't want to use the `Path`
+module in your project, it's easy to marshal `FilePath` to `Path` just
+before using functions from the library.
 
 The second thing, that is rather a consequence of the first, is that there
 is no way to add directories, or to be precise, *empty directories* to your
@@ -185,10 +185,10 @@ archive. This approach is used in Git, and I find it quite sane.
 Finally, the third feature of the library is that it does not modify archive
 instantly, because doing so on every manipulation would often be
 inefficient. Instead we maintain collection of pending actions that can be
-turned into optimized procedure that efficiently modifies archive in one
+turned into an optimized procedure that efficiently modifies archive in one
 pass. Normally this should be of no concern to you, because all actions are
 performed automatically when you leave the realm of `ZipArchive` monad. If,
-however, you ever need to force update, `commit` function is your
+however, you ever need to force update, the `commit` function is your
 friend. There are even “undo” functions, by the way.
 
 Let's take a look at some examples that show how to accomplish most typical
@@ -219,7 +219,7 @@ possible to extract contents of archive as strict `ByteString`:
 λ> withArchive archivePath (saveEntry entrySelector pathToFile)
 ```
 
-…and finally just unpack entire archive into some directory:
+…and finally just unpack the entire archive into some directory:
 
 ```haskell
 λ> withArchive archivePath (unpackInto destDir)
@@ -227,9 +227,9 @@ possible to extract contents of archive as strict `ByteString`:
 
 See also `getArchiveComment` and `getArchiveDescription`.
 
-Modifying is also easy, efficient, and powerful. When you want to create new
-archive use `createArchive`, otherwise `withArchive` will do. To add entry
-from `ByteString`:
+Modifying is also easy, efficient, and powerful. When you want to create a
+new archive use `createArchive`, otherwise `withArchive` will do. To add
+entry from `ByteString`:
 
 ```haskell
 λ> createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
@@ -248,7 +248,7 @@ To add contents from some file, use `loadEntry`:
 λ> createArchive archivePath (loadEntry BZip2 toSelector myFilePath)
 ```
 
-Finally, you can copy entry from another archive without re-compression
+Finally, you can copy an entry from another archive without re-compression
 (unless you use `recompress`, see below):
 
 ```haskell

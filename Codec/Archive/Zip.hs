@@ -7,16 +7,16 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- The module provides everything you need to manipulate Zip archives. There
--- are three things that should be clarified right away, to avoid confusion
--- in the future.
+-- The module provides everything you may need to manipulate Zip archives.
+-- There are three things that should be clarified right away, to avoid
+-- confusion in the future.
 --
 -- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
 -- 'File' paths. This method may seem awkward at first, but it will protect
 -- you from problems with portability when your archive is unpacked on a
 -- different platform. Using of well-typed paths is also something you
 -- should consider doing in your projects anyway. Even if you don't want to
--- use "Path" module in your project, it's easy to marshal 'FilePath' to
+-- use the "Path" module in your project, it's easy to marshal 'FilePath' to
 -- 'Path' just before using functions from the library.
 --
 -- The second thing, that is rather a consequence of the first, is that
@@ -26,11 +26,12 @@
 -- Finally, the third feature of the library is that it does not modify
 -- archive instantly, because doing so on every manipulation would often be
 -- inefficient. Instead we maintain collection of pending actions that can
--- be turned into optimized procedure that efficiently modifies archive in
--- one pass. Normally this should be of no concern to you, because all
+-- be turned into an optimized procedure that efficiently modifies archive
+-- in one pass. Normally this should be of no concern to you, because all
 -- actions are performed automatically when you leave the realm of
--- 'ZipArchive' monad. If, however, you ever need to force update, 'commit'
--- function is your friend. There are even “undo” functions, by the way.
+-- 'ZipArchive' monad. If, however, you ever need to force update, the
+-- 'commit' function is your friend. There are even “undo” functions, by the
+-- way.
 --
 -- An example of a program that prints list of archive entries:
 --
@@ -160,7 +161,7 @@ import qualified Data.Set                   as E
 ----------------------------------------------------------------------------
 -- Archive monad
 
--- | Monad that provides context necessary for performing operations on
+-- | Monad that provides context necessary for performing operations on zip
 -- archives. It's intentionally opaque and not a monad transformer to limit
 -- number of actions that can be performed in it to those provided by this
 -- module and their combinations.
@@ -188,10 +189,10 @@ data ZipState = ZipState
     -- ^ Pending actions
   }
 
--- | Create new archive given its location and action that describes how to
--- create content in the archive. This will silently overwrite specified
--- file if it already exists. See 'withArchive' if you want to work with
--- existing archive.
+-- | Create a new archive given its location and action that describes how
+-- to create contents of the archive. This will silently overwrite the
+-- specified file if it already exists. See 'withArchive' if you want to
+-- work with an existing archive.
 
 createArchive :: (MonadIO m, MonadCatch m)
   => Path b File       -- ^ Location of archive file to create
@@ -209,7 +210,7 @@ createArchive path m = do
   liftIO (evalStateT action st)
 
 -- | Work with an existing archive. See 'createArchive' if you want to
--- create new archive instead.
+-- create a new archive instead.
 --
 -- This operation may fail with:
 --
@@ -229,9 +230,9 @@ createArchive path m = do
 -- compression methods are skipped as well. Also, if several entries would
 -- collide on some operating systems (such as Windows, because of its
 -- case-insensitivity), only one of them will be available, because
--- 'EntrySelector' is case-insensitive. These are consequences of the design
--- decision to make it impossible to create non-portable archives with this
--- library.
+-- 'EntrySelector' is case-insensitive. These are the consequences of the
+-- design decision to make it impossible to create non-portable archives
+-- with this library.
 
 withArchive :: (MonadIO m, MonadThrow m)
   => Path b File       -- ^ Location of archive to work with
@@ -256,15 +257,15 @@ withArchive path m = do
 -- not hesitate to use the function frequently: scanning of archive happens
 -- only once anyway.
 --
--- Please note that returned value only reflects actual contents of archive
--- in file system, non-committed actions cannot influence list of entries,
--- see 'commit' for more information.
+-- Please note that the returned value only reflects actual contents of
+-- archive in file system, non-committed actions do not influence the list
+-- of entries, see 'commit' for more information.
 
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
 
--- | Check whether specified entry exists in the archive. This is a simple
--- shortcut defined as:
+-- | Check whether the specified entry exists in the archive. This is a
+-- simple shortcut defined as:
 --
 -- > doesEntryExist s = M.member s <$> getEntries
 
@@ -307,7 +308,7 @@ getEntrySource s = do
     Nothing   -> throwM (EntryDoesNotExist path s)
     Just desc -> return (I.sourceEntry path desc True)
 
--- | Stream contents of archive entry to specified 'Sink'.
+-- | Stream contents of an archive entry to the given 'Sink'.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -322,7 +323,7 @@ sourceEntry s sink = do
   src <- getEntrySource s
   (liftIO . runResourceT) (src $$ sink)
 
--- | Save specific archive entry as a file in the file system.
+-- | Save a specific archive entry as a file in the file system.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -332,9 +333,9 @@ saveEntry
   -> ZipArchive ()
 saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
 
--- | Calculate CRC32 check sum and compare it with value read from
+-- | Calculate CRC32 check sum and compare it with the value read from the
 -- archive. The function returns 'True' when the check sums are the same —
--- that is, data is not corrupted.
+-- that is, the data is not corrupted.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -348,8 +349,8 @@ checkEntry s = do
   -- 'sourceEntry' would have thrown 'EntryDoesNotExist' already.
   return (calculated == given)
 
--- | Unpack entire archive into specified directory. The directory will be
--- created if it does not exist.
+-- | Unpack the entire archive into the specified directory. The directory
+-- will be created if it does not exist.
 
 unpackInto :: Path b Dir -> ZipArchive ()
 unpackInto dir' = do
@@ -362,12 +363,12 @@ unpackInto dir' = do
     forM_ selectors $ \s ->
       saveEntry s (dir </> unEntrySelector s)
 
--- | Get archive comment.
+-- | Get the archive comment.
 
 getArchiveComment :: ZipArchive (Maybe Text)
 getArchiveComment = adComment <$> getArchiveDescription
 
--- | Get archive description record.
+-- | Get the archive description record.
 
 getArchiveDescription :: ZipArchive ArchiveDescription
 getArchiveDescription = ZipArchive (gets zsArchive)
@@ -375,7 +376,7 @@ getArchiveDescription = ZipArchive (gets zsArchive)
 ----------------------------------------------------------------------------
 -- Modifying archive
 
--- | Add a new entry to archive given its contents in binary form.
+-- | Add a new entry to the archive given its contents in binary form.
 
 addEntry
   :: CompressionMethod -- ^ Compression method to use
@@ -393,7 +394,7 @@ sinkEntry
   -> ZipArchive ()
 sinkEntry t src s = addPending (I.SinkEntry t src s)
 
--- | Load entry from given file.
+-- | Load an entry from a given file.
 
 loadEntry
   :: CompressionMethod -- ^ Compression method to use
@@ -408,8 +409,8 @@ loadEntry t f path = do
   addPending (I.SinkEntry t src s)
   addPending (I.SetModTime modTime s)
 
--- | Copy entry “as is” from another .ZIP archive. If the entry does not
--- exists in that archive, 'EntryDoesNotExist' will be eventually thrown.
+-- | Copy an entry “as is” from another zip archive. If the entry does not
+-- exist in that archive, 'EntryDoesNotExist' will be eventually thrown.
 
 copyEntry
   :: Path b File       -- ^ Path to archive to copy from
@@ -420,8 +421,8 @@ copyEntry path s' s = do
   apath <- liftIO (canonicalizePath path)
   addPending (I.CopyEntry apath s' s)
 
--- | Add entire directory to archive. Please note that due to design of the
--- library, empty sub-directories won't be added.
+-- | Add an entire directory to the archive. Please note that due to the
+-- design of the library, empty sub-directories won't be added.
 --
 -- The action can throw the same exceptions as 'listDirRecur' and
 -- 'InvalidEntrySelector'.
@@ -435,8 +436,8 @@ packDirRecur t f path = do
   files <- snd <$> liftIO (listDirRecur path)
   mapM_ (loadEntry t f) files
 
--- | Rename entry in archive. If the entry does not exist, nothing will
--- happen.
+-- | Rename an entry in the archive. If the entry does not exist, nothing
+-- will happen.
 
 renameEntry
   :: EntrySelector     -- ^ Original entry name
@@ -444,7 +445,8 @@ renameEntry
   -> ZipArchive ()
 renameEntry old new = addPending (I.RenameEntry old new)
 
--- | Delete entry from archive, if it does not exist, nothing will happen.
+-- | Delete an entry from the archive, if it does not exist, nothing will
+-- happen.
 
 deleteEntry :: EntrySelector -> ZipArchive ()
 deleteEntry s = addPending (I.DeleteEntry s)
@@ -458,24 +460,24 @@ recompress
   -> ZipArchive ()
 recompress t s = addPending (I.Recompress t s)
 
--- | Set entry comment, if that entry does not exist, nothing will
--- happen. Note that if binary representation of comment is longer than
+-- | Set an entry comment, if that entry does not exist, nothing will
+-- happen. Note that if binary representation of the comment is longer than
 -- 65535 bytes, it will be truncated on writing.
 
 setEntryComment
   :: Text              -- ^ Text of the comment
-  -> EntrySelector     -- ^ Name of entry to comment upon
+  -> EntrySelector     -- ^ Name of entry to comment on
   -> ZipArchive ()
 setEntryComment text s = addPending (I.SetEntryComment text s)
 
--- | Delete entry's comment, if that entry does not exist, nothing will
+-- | Delete an entry's comment, if that entry does not exist, nothing will
 -- happen.
 
 deleteEntryComment :: EntrySelector -> ZipArchive ()
 deleteEntryComment s = addPending (I.DeleteEntryComment s)
 
--- | Set “last modification” date\/time. Specified entry may be missing, in
--- that case this action has no effect.
+-- | Set the “last modification” date\/time. The specified entry may be
+-- missing, in that case the action has no effect.
 
 setModTime
   :: UTCTime           -- ^ New modification time
@@ -483,8 +485,8 @@ setModTime
   -> ZipArchive ()
 setModTime time s = addPending (I.SetModTime time s)
 
--- | Add an extra field. Specified entry may be missing, in that case this
--- action has no effect.
+-- | Add an extra field. The specified entry may be missing, in that case
+-- this action has no effect.
 
 addExtraField
   :: Word16            -- ^ Tag (header id) of extra field to add
@@ -493,7 +495,7 @@ addExtraField
   -> ZipArchive ()
 addExtraField n b s = addPending (I.AddExtraField n b s)
 
--- | Delete an extra field by its type (tag). Specified entry may be
+-- | Delete an extra field by its type (tag). The specified entry may be
 -- missing, in that case this action has no effect.
 
 deleteExtraField
@@ -502,30 +504,30 @@ deleteExtraField
   -> ZipArchive ()
 deleteExtraField n s = addPending (I.DeleteExtraField n s)
 
--- | Perform an action on every entry in archive.
+-- | Perform an action on every entry in the archive.
 
 forEntries
   :: (EntrySelector -> ZipArchive ()) -- ^ Action to perform
   -> ZipArchive ()
 forEntries action = getEntries >>= mapM_ action . M.keysSet
 
--- | Set comment of entire archive.
+-- | Set comment of the entire archive.
 
 setArchiveComment :: Text -> ZipArchive ()
 setArchiveComment text = addPending (I.SetArchiveComment text)
 
--- | Delete archive comment if it's present.
+-- | Delete the archive comment if it's present.
 
 deleteArchiveComment :: ZipArchive ()
 deleteArchiveComment = addPending I.DeleteArchiveComment
 
--- | Undo changes to specific archive entry.
+-- | Undo changes to a specific archive entry.
 
 undoEntryChanges :: EntrySelector -> ZipArchive ()
 undoEntryChanges s = modifyActions f
   where f = S.filter ((/= Just s) . I.targetEntry)
 
--- | Undo changes to archive as a whole (archive's comment).
+-- | Undo changes to the archive as a whole (archive's comment).
 
 undoArchiveChanges :: ZipArchive ()
 undoArchiveChanges = modifyActions f
@@ -537,12 +539,12 @@ undoAll :: ZipArchive ()
 undoAll = modifyActions (const S.empty)
 
 -- | Archive contents are not modified instantly, but instead changes are
--- collected as “pending actions” that should be committed in order to
+-- collected as “pending actions” that should be committed, in order to
 -- efficiently modify archive in one pass. The actions are committed
--- automatically when program leaves the realm of 'ZipArchive' monad
--- (i.e. as part of 'createArchive' or 'withArchive'), or can be forced
--- explicitly with help of this function. Once committed, changes take place
--- in the file system and cannot be undone.
+-- automatically when program leaves the realm of 'ZipArchive' monad (i.e.
+-- as part of 'createArchive' or 'withArchive'), or can be forced explicitly
+-- with the help of this function. Once committed, changes take place in the
+-- file system and cannot be undone.
 
 commit :: ZipArchive ()
 commit = do
@@ -566,23 +568,24 @@ commit = do
 ----------------------------------------------------------------------------
 -- Helpers
 
--- | Get path of actual archive file from inside of 'ZipArchive' monad.
+-- | Get the path of the actual archive file from inside of 'ZipArchive'
+-- monad.
 
 getFilePath :: ZipArchive (Path Abs File)
 getFilePath = ZipArchive (gets zsFilePath)
 
--- | Get collection of pending actions.
+-- | Get the collection of pending actions.
 
 getPending :: ZipArchive (Seq I.PendingAction)
 getPending = ZipArchive (gets zsActions)
 
--- | Modify collection of pending actions in some way.
+-- | Modify the collection of pending actions in some way.
 
 modifyActions :: (Seq I.PendingAction -> Seq I.PendingAction) -> ZipArchive ()
 modifyActions f = ZipArchive (modify g)
   where g st = st { zsActions = f (zsActions st) }
 
--- | Add new action to the list of pending actions.
+-- | Add a new action to the list of pending actions.
 
 addPending :: I.PendingAction -> ZipArchive ()
 addPending a = modifyActions (|> a)

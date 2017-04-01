@@ -59,21 +59,21 @@ import qualified System.FilePath.Windows as Windows
 ----------------------------------------------------------------------------
 -- Entry selector
 
--- | This data type serves for naming and selection of archive
--- entries. It can be created only with help of smart constructor
+-- | This data type serves for naming and selection of archive entries. It
+-- can be created only with the help of the smart constructor
 -- 'mkEntrySelector', and it's the only “key” that can be used to select
 -- files in archive or to name new files.
 --
 -- The abstraction is crucial for ensuring that created archives are
--- portable across operating systems, file systems, and different
--- platforms. Since on some operating systems, file paths are
--- case-insensitive, this selector is also case-insensitive. It makes sure
--- that only relative paths are used to name files inside archive, as it's
--- recommended in the specification. It also guarantees that forward slashes
--- are used when the path is stored inside archive for compatibility with
--- Unix-like operating systems (as it is recommended in the
--- specification). On the other hand, in can be rendered as ordinary
--- relative file path in OS-specific format, when needed.
+-- portable across operating systems, file systems, and different platforms.
+-- Since on some operating systems, file paths are case-insensitive, this
+-- selector is also case-insensitive. It makes sure that only relative paths
+-- are used to name files inside archive, as it's recommended in the
+-- specification. It also guarantees that forward slashes are used when the
+-- path is stored inside archive for compatibility with Unix-like operating
+-- systems (as it is recommended in the specification). On the other hand,
+-- in can be rendered as ordinary relative file path in OS-specific format,
+-- when needed.
 
 newtype EntrySelector = EntrySelector
   { unES :: NonEmpty (CI String)
@@ -83,7 +83,7 @@ newtype EntrySelector = EntrySelector
 instance Show EntrySelector where
   show = show . unEntrySelector
 
--- | Create 'EntrySelector' from @Path Rel File@. To avoid problems with
+-- | Create an 'EntrySelector' from @Path Rel File@. To avoid problems with
 -- distribution of the archive, characters that some operating systems do
 -- not expect in paths are not allowed. Proper paths should pass these
 -- checks:
@@ -122,7 +122,7 @@ unEntrySelector = unES
   >>> parseRelFile
   >>> fromJust
 
--- | Get entry name given 'EntrySelector' in from that is suitable for
+-- | Get entry name given 'EntrySelector' in the from that is suitable for
 -- writing to file header.
 
 getEntryName :: EntrySelector -> Text
@@ -133,7 +133,7 @@ getEntryName = unES
   >>> concat
   >>> T.pack
 
--- | Exception describing various troubles you can have with
+-- | The exception describing various troubles you can have with
 -- 'EntrySelector'.
 
 data EntrySelectorException
@@ -150,7 +150,7 @@ instance Exception EntrySelectorException
 -- Entry description
 
 -- | This record represents all information about archive entry that can be
--- stored in a .ZIP archive. It does not mirror local file header or central
+-- stored in a zip archive. It does not mirror local file header or central
 -- directory file header, but their binary representation can be built given
 -- this date structure and actual archive contents.
 
@@ -189,7 +189,7 @@ data ArchiveDescription = ArchiveDescription
 ----------------------------------------------------------------------------
 -- Exceptions
 
--- | Bad things that can happen when you use the library.
+-- | The bad things that can happen when you use the library.
 
 data ZipException
   = EntryDoesNotExist (Path Abs File) EntrySelector
