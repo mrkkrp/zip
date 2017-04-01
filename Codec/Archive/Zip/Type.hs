@@ -139,7 +139,7 @@ getEntryName = unES
 data EntrySelectorException
   = InvalidEntrySelector (Path Rel File)
     -- ^ Selector cannot be created from this path
-  deriving (Typeable)
+  deriving (Eq, Ord, Typeable)
 
 instance Show EntrySelectorException where
   show (InvalidEntrySelector path) = "Cannot build selector from " ++ show path
@@ -173,7 +173,7 @@ data CompressionMethod
   = Store              -- ^ Store file uncompressed
   | Deflate            -- ^ Deflate
   | BZip2              -- ^ Compressed using BZip2 algorithm
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Data, Typeable)
+  deriving (Show, Read, Eq, Ord, Enum, Bounded, Data, Typeable)
 
 ----------------------------------------------------------------------------
 -- Archive description
@@ -196,7 +196,7 @@ data ZipException
     -- ^ Thrown when you try to get contents of non-existing entry
   | ParsingFailed     (Path Abs File) String
     -- ^ Thrown when archive structure cannot be parsed
-  deriving (Typeable)
+  deriving (Eq, Ord, Typeable)
 
 instance Show ZipException where
   show (EntryDoesNotExist file s) =
