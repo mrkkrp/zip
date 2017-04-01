@@ -1,3 +1,11 @@
+## Zip 0.1.10
+
+* Made `getEntrySource` polymorphic in terms of the `Source` it returns.
+
+* Numerous cosmetic corrections to the docs.
+
+* Derived `Eq` and `Ord` for `EntrySelectorException` and `ZipException`.
+
 ## Zip 0.1.9
 
 * Fixed a bug with modification time serialization on 32 bit systems.
