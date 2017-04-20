@@ -102,7 +102,7 @@ For reference, here is a [copy of the specification](https://pkware.cachefly.net
 * [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)
 * [Bzip2](https://en.wikipedia.org/wiki/Bzip2)
 
-The best way to add new compression method to the library is to write
+The best way to add a new compression method to the library is to write a
 conduit that will do the compression and publish it as a library. `zip` can
 then depend on it and add it to the list of supported compression methods.
 The current list of compression methods reflects what is available on
@@ -112,7 +112,7 @@ Hackage at the moment.
 
 Encryption is currently not supported. Encryption system described in Zip
 specification is known to be seriously flawed, so it's probably not the best
-way to protect your data anyway. The encryption method seems to be
+way to protect your data anyway. The encryption method seems to be a
 proprietary technology of PKWARE (at least that's what stated about it in
 the .ZIP specification), so to hell with it.
 
