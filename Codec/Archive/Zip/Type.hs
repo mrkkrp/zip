@@ -83,9 +83,9 @@ newtype EntrySelector = EntrySelector
 instance Show EntrySelector where
   show = show . unEntrySelector
 
--- | Create an 'EntrySelector' from @Path Rel File@. To avoid problems with
--- distribution of the archive, characters that some operating systems do
--- not expect in paths are not allowed. Proper paths should pass these
+-- | Create an 'EntrySelector' from @'Path' 'Rel' 'File'@. To avoid problems
+-- with distribution of the archive, characters that some operating systems
+-- do not expect in paths are not allowed. Proper paths should pass these
 -- checks:
 --
 --     * 'System.FilePath.Posix.isValid'
@@ -93,7 +93,7 @@ instance Show EntrySelector where
 --     * binary representation of normalized path should be not longer than
 --       65535 bytes
 --
--- This function can throw 'EntrySelectorException' exception.
+-- This function can throw an 'EntrySelectorException'.
 
 mkEntrySelector :: MonadThrow m => Path Rel File -> m EntrySelector
 mkEntrySelector path =
@@ -112,7 +112,7 @@ mkEntrySelector path =
        else throwM (InvalidEntrySelector path)
 
 -- | Make a relative path from 'EntrySelector'. Every 'EntrySelector'
--- produces single @Path Rel File@ that corresponds to it.
+-- produces a single @'Path' 'Rel' 'File'@ that corresponds to it.
 
 unEntrySelector :: EntrySelector -> Path Rel File
 unEntrySelector = unES
@@ -122,8 +122,8 @@ unEntrySelector = unES
   >>> parseRelFile
   >>> fromJust
 
--- | Get entry name given 'EntrySelector' in the from that is suitable for
--- writing to file header.
+-- | Get an entry name in the from that is suitable for writing to file
+-- header, given an 'EntrySelector'.
 
 getEntryName :: EntrySelector -> Text
 getEntryName = unES
@@ -152,7 +152,7 @@ instance Exception EntrySelectorException
 -- | This record represents all information about archive entry that can be
 -- stored in a zip archive. It does not mirror local file header or central
 -- directory file header, but their binary representation can be built given
--- this date structure and actual archive contents.
+-- this data structure and the actual archive contents.
 
 data EntryDescription = EntryDescription
   { edVersionMadeBy    :: Version -- ^ Version made by

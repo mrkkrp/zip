@@ -13,11 +13,11 @@
 --
 -- First, we use the 'EntrySelector' type that can be obtained from 'Path'
 -- 'Rel' 'File' paths. This method may seem awkward at first, but it will
--- protect you from problems with portability when your archive is unpacked
--- on a different platform. Using of well-typed paths is also something you
--- should consider doing in your projects anyway. Even if you don't want to
--- use the "Path" module in your project, it's easy to marshal 'FilePath' to
--- 'Path' just before using functions from the library.
+-- protect you from the problems with portability when your archive is
+-- unpacked on a different platform. Using well-typed paths is also
+-- something you should consider doing in your projects anyway. Even if you
+-- don't want to use the "Path" module in your project, it's easy to marshal
+-- 'FilePath' to 'Path' just before using functions from the library.
 --
 -- The second thing, that is rather a consequence of the first, is that
 -- there is no way to add directories, or to be precise, /empty directories/
@@ -25,7 +25,7 @@
 --
 -- Finally, the third feature of the library is that it does not modify
 -- archive instantly, because doing so on every manipulation would often be
--- inefficient. Instead we maintain collection of pending actions that can
+-- inefficient. Instead we maintain a collection of pending actions that can
 -- be turned into an optimized procedure that efficiently modifies archive
 -- in one pass. Normally this should be of no concern to you, because all
 -- actions are performed automatically when you leave the realm of
@@ -33,7 +33,9 @@
 -- 'commit' function is your friend. There are even “undo” functions, by the
 -- way.
 --
--- An example of a program that prints list of archive entries:
+-- === Examples
+--
+-- An example of a program that prints a list of archive entries:
 --
 -- > import Codec.Archive.Zip
 -- > import Path.IO (resolveFile')
@@ -47,7 +49,7 @@
 -- >   entries <- withArchive path (M.keys <$> getEntries)
 -- >   mapM_ print entries
 --
--- Create a Zip archive with a Hello World file:
+-- Create a Zip archive with a “Hello World” file:
 --
 -- > import Codec.Archive.Zip
 -- > import Path (parseRelFile)
@@ -61,7 +63,7 @@
 -- >   s       <- parseRelFile "hello-world.txt" >>= mkEntrySelector
 -- >   createArchive path (addEntry Store "Hello, World!" s)
 --
--- Extract contents of specific file and print it:
+-- Extract contents of a specific file and print them:
 --
 -- > import Codec.Archive.Zip
 -- > import Path (parseRelFile)
@@ -163,8 +165,8 @@ import qualified Data.Set                   as E
 
 -- | Monad that provides context necessary for performing operations on zip
 -- archives. It's intentionally opaque and not a monad transformer to limit
--- number of actions that can be performed in it to those provided by this
--- module and their combinations.
+-- the actions that can be performed in it to those provided by this module
+-- and their combinations.
 
 newtype ZipArchive a = ZipArchive
   { unZipArchive :: StateT ZipState IO a
@@ -189,8 +191,8 @@ data ZipState = ZipState
     -- ^ Pending actions
   }
 
--- | Create a new archive given its location and action that describes how
--- to create contents of the archive. This will silently overwrite the
+-- | Create a new archive given its location and an action that describes
+-- how to create contents of the archive. This will silently overwrite the
 -- specified file if it already exists. See 'withArchive' if you want to
 -- work with an existing archive.
 
@@ -257,7 +259,7 @@ withArchive path m = do
 -- Do not hesitate to use the function frequently: scanning of archive
 -- happens only once anyway.
 --
--- Please note that the returned value only reflects actual contents of
+-- Please note that the returned value only reflects actual contents of the
 -- archive in file system, non-committed actions do not influence the list
 -- of entries, see 'commit' for more information.
 
@@ -291,7 +293,7 @@ getEntry
   -> ZipArchive ByteString -- ^ Contents of the entry
 getEntry s = sourceEntry s (CL.foldMap id)
 
--- | Get entry source.
+-- | Get an entry source.
 --
 -- Throws: 'EntryDoesNotExist'.
 --

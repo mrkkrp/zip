@@ -53,7 +53,7 @@ in all its entirety. For my use-case it's not acceptable.
 ### LibZip
 
 This is a binding to C
-library [`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always
+library [`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always a
 certain kind of trouble when you are using bindings. For example, you need
 to take care that target library is installed and its version is compatible
 with the version of your binding. Yes, this means additional headaches. It
@@ -74,9 +74,9 @@ version of the library from Stackage, and I don't yet know what will be on
 the server.
 
 After much frustration with all these things I decided to avoid using of
-`LibZip`, because after all, this is not that sort of project that shouldn't
-be done in pure Haskell. By rewriting this in Haskell, I also can make it
-safer to use.
+`LibZip`, because after all, this is not that sort of a project that
+shouldn't be done in pure Haskell. By rewriting this in Haskell, I also can
+make it safer to use.
 
 ### zip-conduit
 
@@ -110,9 +110,9 @@ Hackage at the moment.
 
 ### Encryption
 
-Encryption is currently not supported. Encryption system described in .ZIP
-specification is known to be seriously flawed, so it's probably not the best
-way to protect your data anyway. The encryption method seems to be a
+Encryption is currently not supported. Encryption system described in the
+.ZIP specification is known to be seriously flawed, so it's probably not the
+best way to protect your data anyway. The encryption method seems to be a
 proprietary technology of PKWARE (at least that's what stated about it in
 the .ZIP specification), so to hell with it.
 
@@ -124,11 +124,8 @@ how to get extracted data. The following methods are supported:
 * *File name.* This is an efficient method to perform compression or
   decompression. You just specify where to get data or where to save it and
   the rest is handled by the library.
-
 * *Conduit source or sink.*
-
 * *ByteString.* Use it only with small data.
-
 * *Copy file from another archive.* An efficient operation, file is copied
   “as is”—no re-compression is performed.
 
@@ -138,9 +135,7 @@ When necessary, the `ZIP64` extension is automatically used. It's necessary
 when anything from this list takes place:
 
 * Total size of archive is greater than 4 GB.
-
 * Size of compressed/uncompressed file in archive is greater than 4 GB.
-
 * There are more than 65535 entries in archive.
 
 The library is particularly suited for processing of large files. For
@@ -172,11 +167,11 @@ right away, to avoid confusion in the future.
 
 First, we use the `EntrySelector` type that can be obtained from `Path Rel
 File` paths. This method may seem awkward at first, but it will protect you
-from problems with portability when your archive is unpacked on a different
-platform. Using of well-typed paths is also something you should consider
-doing in your projects anyway. Even if you don't want to use the `Path`
-module in your project, it's easy to marshal `FilePath` to `Path` just
-before using functions from the library.
+from the problems with portability when your archive is unpacked on a
+different platform. Using well-typed paths is also something you should
+consider doing in your projects anyway. Even if you don't want to use the
+`Path` module in your project, it's easy to marshal `FilePath` to `Path`
+just before using functions from the library.
 
 The second thing, that is rather a consequence of the first, is that there
 is no way to add directories, or to be precise, *empty directories* to your
@@ -184,7 +179,7 @@ archive. This approach is used in Git, and I find it quite sane.
 
 Finally, the third feature of the library is that it does not modify archive
 instantly, because doing so on every manipulation would often be
-inefficient. Instead we maintain collection of pending actions that can be
+inefficient. Instead we maintain a collection of pending actions that can be
 turned into an optimized procedure that efficiently modifies archive in one
 pass. Normally this should be of no concern to you, because all actions are
 performed automatically when you leave the realm of `ZipArchive` monad. If,
@@ -200,20 +195,20 @@ To get full information about archive entries, use `getEntries`:
 λ> withArchive archivePath (M.keys <$> getEntries)
 ```
 
-This will return list of all entries in archive at `archivePath`. It's
-possible to extract contents of archive as strict `ByteString`:
+This will return a list of all entries in the archive at `archivePath`. It's
+possible to extract contents of an entry as a strict `ByteString`:
 
 ```haskell
 λ> withArchive archivePath (getEntry entrySelector)
 ```
 
-…to stream them to given sink:
+…to stream them to a given sink:
 
 ```haskell
 λ> withArchive archivePath (sourceEntry entrySelector mySink)
 ```
 
-…to save specific entry to a file:
+…to save a specific entry to a file:
 
 ```haskell
 λ> withArchive archivePath (saveEntry entrySelector pathToFile)
@@ -241,7 +236,7 @@ You can stream from `Source` as well:
 λ> createArchive archivePath (sinkEntry Deflate source entrySelector)
 ```
 
-To add contents from some file, use `loadEntry`:
+To add contents from a file, use `loadEntry`:
 
 ```haskell
 λ> let toSelector = const $ parseRelFile "my-entry.txt" >>= mkEntrySelector
