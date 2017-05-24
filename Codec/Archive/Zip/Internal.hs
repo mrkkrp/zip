@@ -25,6 +25,7 @@ import Codec.Archive.Zip.Type
 import Control.Applicative (many, (<|>))
 import Control.Monad
 import Control.Monad.Catch
+import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Resource (ResourceT, runResourceT, MonadResource)
 import Data.Bits
 import Data.Bool (bool)
@@ -804,7 +805,10 @@ locateECD path h = sizeCheck
           done  = pos <= limit
       if sig == 0x06054b50
         then do
-          result <- checkComment pos >>+ checkCDSig >>+ checkZip64
+          result <- runMaybeT $
+            MaybeT (checkComment pos) >>=
+            MaybeT . checkCDSig       >>=
+            MaybeT . checkZip64
           case result of
             Nothing -> bool again (return Nothing) done
             Just ecd -> return (Just ecd)
@@ -855,13 +859,6 @@ locateECD path h = sizeCheck
 
 ----------------------------------------------------------------------------
 -- Helpers
-
--- | Chain 'Maybe' monad inside 'IO' monad.
-
-infixl 1 >>+
-
-(>>+) :: IO (Maybe a) -> (a -> IO (Maybe b)) -> IO (Maybe b)
-a >>+ b = a >>= maybe (return Nothing) b
 
 -- | Rename an entry (key) in a 'Map'.
 
