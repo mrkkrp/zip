@@ -4,8 +4,8 @@ cabal-version:        >= 1.10
 tested-with:          GHC==7.10.3, GHC==8.0.2
 license:              BSD3
 license-file:         LICENSE.md
-author:               Mark Karpov <markkarpov@opmbx.org>
-maintainer:           Mark Karpov <markkarpov@opmbx.org>
+author:               Mark Karpov <markkarpov92@gmail.com>
+maintainer:           Mark Karpov <markkarpov92@gmail.com>
 homepage:             https://github.com/mrkkrp/zip
 bug-reports:          https://github.com/mrkkrp/zip/issues
 category:             Codec
