@@ -277,10 +277,11 @@ toRecreatingActions
   -> Map EntrySelector EntryDescription -- ^ Actual list of entires
   -> Seq PendingAction -- ^ Actions that recreate the archive entries
 toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
-  where f s e = s |> CopyEntry path e e
+  where
+    f s e = s |> CopyEntry path e e
 
 -- | Transform a collection of 'PendingAction's into 'ProducingActions' and
--- 'EditingActions' — data that describes how to create resulting archive.
+-- 'EditingActions'—data that describes how to create resulting archive.
 
 optimize
   :: Seq PendingAction -- ^ Collection of pending actions
@@ -1012,8 +1013,8 @@ fromMsDosTime MsDosTime {..} = UTCTime
     month   = fromIntegral $ shiftR msDosDate 5 .&. 0x0f
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
 
--- | We use the constants of type 'Natural' instead of literals to protect
--- ourselves from overflows on 32 bit systems.
+-- | We use the constants of the type 'Natural' instead of literals to
+-- protect ourselves from overflows on 32 bit systems.
 
 ffff, ffffffff :: Natural
 ffff     = 0xffff

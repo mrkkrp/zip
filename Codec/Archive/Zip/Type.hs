@@ -105,7 +105,7 @@ mkEntrySelector path =
       binLength    = B.length . T.encodeUtf8 . getEntryName
   in if Posix.isValid fp   &&
         Windows.isValid fp &&
-        fp /= "."          && -- work around bug in path package
+        fp /= "."          && -- work around a bug in the path package
         not (null pieces)  &&
         binLength selector <= 0xffff
        then return selector

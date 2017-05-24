@@ -61,7 +61,7 @@ should be just “plug and play”, but now you need to watch out for
 compatibility.
 
 It's not that bad with libraries that do not break their API for years, but
-it's not the case with `libzip`. As maintainer of `LibZip` puts it:
+it's not the case with `libzip`. As the maintainer of `LibZip` puts it:
 
 > libzip 0.10, 0.11, and 1.0 are not binary compatible. If your C library is
 > 0.11.x, then you should use LibZip 0.11. If your C library is 1.0, then
@@ -110,7 +110,7 @@ Hackage at the moment.
 
 ### Encryption
 
-Encryption is currently not supported. Encryption system described in Zip
+Encryption is currently not supported. Encryption system described in .ZIP
 specification is known to be seriously flawed, so it's probably not the best
 way to protect your data anyway. The encryption method seems to be a
 proprietary technology of PKWARE (at least that's what stated about it in
@@ -130,7 +130,7 @@ how to get extracted data. The following methods are supported:
 * *ByteString.* Use it only with small data.
 
 * *Copy file from another archive.* An efficient operation, file is copied
-  “as is” — no re-compression is performed.
+  “as is”—no re-compression is performed.
 
 ### ZIP64
 
@@ -145,7 +145,7 @@ when anything from this list takes place:
 
 The library is particularly suited for processing of large files. For
 example, I've been able to easily create 6.5 GB archive with reasonable
-speed and without any significant memory consumption.
+speed and without significant memory consumption.
 
 ### Filenames
 
@@ -170,9 +170,9 @@ The module `Codec.Archive.Zip` provides everything you may need to
 manipulate Zip archives. There are three things that should be clarified
 right away, to avoid confusion in the future.
 
-First, we use `EntrySelector` type that can be obtained from `Path Rel File`
-paths. This method may seem awkward at first, but it will protect you from
-problems with portability when your archive is unpacked on a different
+First, we use the `EntrySelector` type that can be obtained from `Path Rel
+File` paths. This method may seem awkward at first, but it will protect you
+from problems with portability when your archive is unpacked on a different
 platform. Using of well-typed paths is also something you should consider
 doing in your projects anyway. Even if you don't want to use the `Path`
 module in your project, it's easy to marshal `FilePath` to `Path` just
@@ -188,7 +188,7 @@ inefficient. Instead we maintain collection of pending actions that can be
 turned into an optimized procedure that efficiently modifies archive in one
 pass. Normally this should be of no concern to you, because all actions are
 performed automatically when you leave the realm of `ZipArchive` monad. If,
-however, you ever need to force update, the `commit` function is your
+however, you ever need to force an update, the `commit` function is your
 friend. There are even “undo” functions, by the way.
 
 Let's take a look at some examples that show how to accomplish most typical
@@ -228,7 +228,7 @@ possible to extract contents of archive as strict `ByteString`:
 See also `getArchiveComment` and `getArchiveDescription`.
 
 Modifying is also easy, efficient, and powerful. When you want to create a
-new archive use `createArchive`, otherwise `withArchive` will do. To add
+new archive use `createArchive`, otherwise `withArchive` will do. To add an
 entry from `ByteString`:
 
 ```haskell
@@ -283,7 +283,7 @@ missing something.
 You can contact the maintainer via
 [the issue tracker](https://github.com/mrkkrp/zip/issues).
 
-We are open to pull requests, they will be merged quickly if they are good!
+Pull requests are also welcome and will be reviewed quickly.
 
 ## License
 

@@ -11,10 +11,10 @@
 -- There are three things that should be clarified right away, to avoid
 -- confusion in the future.
 --
--- First, we use 'EntrySelector' type that can be obtained from 'Path' 'Rel'
--- 'File' paths. This method may seem awkward at first, but it will protect
--- you from problems with portability when your archive is unpacked on a
--- different platform. Using of well-typed paths is also something you
+-- First, we use the 'EntrySelector' type that can be obtained from 'Path'
+-- 'Rel' 'File' paths. This method may seem awkward at first, but it will
+-- protect you from problems with portability when your archive is unpacked
+-- on a different platform. Using of well-typed paths is also something you
 -- should consider doing in your projects anyway. Even if you don't want to
 -- use the "Path" module in your project, it's easy to marshal 'FilePath' to
 -- 'Path' just before using functions from the library.
@@ -29,7 +29,7 @@
 -- be turned into an optimized procedure that efficiently modifies archive
 -- in one pass. Normally this should be of no concern to you, because all
 -- actions are performed automatically when you leave the realm of
--- 'ZipArchive' monad. If, however, you ever need to force update, the
+-- 'ZipArchive' monad. If, however, you ever need to force an update, the
 -- 'commit' function is your friend. There are even “undo” functions, by the
 -- way.
 --
@@ -226,10 +226,10 @@ createArchive path m = do
 --     cannot parse (this includes multi-disk archives, for example).
 --
 -- Please note that entries with invalid (non-portable) file names may be
--- missing in list of entries. Files that are compressed with unsupported
--- compression methods are skipped as well. Also, if several entries would
--- collide on some operating systems (such as Windows, because of its
--- case-insensitivity), only one of them will be available, because
+-- missing in the list of entries. Files that are compressed with
+-- unsupported compression methods are skipped as well. Also, if several
+-- entries would collide on some operating systems (such as Windows, because
+-- of its case-insensitivity), only one of them will be available, because
 -- 'EntrySelector' is case-insensitive. These are the consequences of the
 -- design decision to make it impossible to create non-portable archives
 -- with this library.
@@ -253,9 +253,9 @@ withArchive path m = do
 -- Retrieving information
 
 -- | Retrieve description of all archive entries. This is an efficient
--- operation that can be used for example to list all entries in archive. Do
--- not hesitate to use the function frequently: scanning of archive happens
--- only once anyway.
+-- operation that can be used for example to list all entries in an archive.
+-- Do not hesitate to use the function frequently: scanning of archive
+-- happens only once anyway.
 --
 -- Please note that the returned value only reflects actual contents of
 -- archive in file system, non-committed actions do not influence the list
@@ -280,9 +280,9 @@ doesEntryExist s = M.member s <$> getEntries
 getEntryDesc :: EntrySelector -> ZipArchive (Maybe EntryDescription)
 getEntryDesc s = M.lookup s <$> getEntries
 
--- | Get contents of specific archive entry as strict 'ByteString'. It's not
--- recommended to use this on big entries, because it will suck out a lot of
--- memory. For big entries, use conduits: 'sourceEntry'.
+-- | Get contents of a specific archive entry as a strict 'ByteString'. It's
+-- not recommended to use this on big entries, because it will suck out a
+-- lot of memory. For big entries, use conduits: 'sourceEntry'.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -334,8 +334,8 @@ saveEntry
 saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
 
 -- | Calculate CRC32 check sum and compare it with the value read from the
--- archive. The function returns 'True' when the check sums are the same —
--- that is, the data is not corrupted.
+-- archive. The function returns 'True' when the check sums are the
+-- same—that is, the data is not corrupted.
 --
 -- Throws: 'EntryDoesNotExist'.
 
@@ -540,11 +540,11 @@ undoAll = modifyActions (const S.empty)
 
 -- | Archive contents are not modified instantly, but instead changes are
 -- collected as “pending actions” that should be committed, in order to
--- efficiently modify archive in one pass. The actions are committed
--- automatically when program leaves the realm of 'ZipArchive' monad (i.e.
--- as part of 'createArchive' or 'withArchive'), or can be forced explicitly
--- with the help of this function. Once committed, changes take place in the
--- file system and cannot be undone.
+-- efficiently modify the archive in one pass. The actions are committed
+-- automatically when the program leaves the realm of 'ZipArchive' monad
+-- (i.e. as part of 'createArchive' or 'withArchive'), or can be forced
+-- explicitly with the help of this function. Once committed, changes take
+-- place in the file system and cannot be undone.
 
 commit :: ZipArchive ()
 commit = do
@@ -556,8 +556,8 @@ commit = do
   unless (S.null actions && exists) $ do
     liftIO (I.commit file odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
-    -- archive is to scan it again — manual manipulations with descriptions
-    -- of entries are too error-prone. We also want to erase all pending
+    -- archive is to scan it again—manual manipulations with descriptions of
+    -- entries are too error-prone. We also want to erase all pending
     -- actions because 'I.commit' executes them all by definition.
     (ndesc, nentries) <- liftIO (I.scanArchive file)
     ZipArchive . modify $ \st -> st
