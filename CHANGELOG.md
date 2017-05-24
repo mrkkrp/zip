@@ -1,3 +1,9 @@
+## Zip 0.1.11
+
+* Minor refactoring.
+
+* Improved documentation and metadata.
+
 ## Zip 0.1.10
 
 * Made `getEntrySource` polymorphic in terms of the `Source` it returns.
