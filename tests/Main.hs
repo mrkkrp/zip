@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
@@ -611,7 +612,12 @@ packDirRecurSpec =
   it "packs arbitrary directory recursively" $
     \path -> property $ \contents -> do
       let dir = parent path
+#if MIN_VERSION_path(0,6,0)
+          f   = stripProperPrefix dir >=> mkEntrySelector
+#else
           f   = stripDir dir >=> mkEntrySelector
+#endif
+
       blew <- catchIOError (do
         forM_ contents $ \s -> do
           let item = dir </> unEntrySelector s
@@ -638,7 +644,11 @@ unpackIntoSpec =
       when blew discard -- TODO
       removeFile path
       selectors <- listDirRecur dir >>=
+#if MIN_VERSION_path(0,6,0)
+        mapM (stripProperPrefix dir >=> mkEntrySelector) . snd
+#else
         mapM (stripDir dir >=> mkEntrySelector) . snd
+#endif
       E.fromList selectors `shouldBe` M.keysSet m
 
 ----------------------------------------------------------------------------
