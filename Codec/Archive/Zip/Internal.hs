@@ -26,12 +26,12 @@ import Control.Applicative (many, (<|>))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Resource (ResourceT, runResourceT, MonadResource)
+import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Conduit, Source, Sink, (=$=), ($$), awaitForever, yield)
+import Data.Conduit (Conduit, Source, Sink, (.|))
 import Data.Conduit.Internal (zipSinks)
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
@@ -50,6 +50,7 @@ import Path
 import System.IO
 import System.PlanB
 import qualified Data.ByteString     as B
+import qualified Data.Conduit        as C
 import qualified Data.Conduit.BZlib  as BZ
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List   as CL
@@ -218,7 +219,7 @@ sourceEntry
   -> Bool              -- ^ Should we stream uncompressed data?
   -> Source m ByteString -- ^ Source of uncompressed data
 sourceEntry path EntryDescription {..} d =
-  source =$= CB.isolate (fromIntegral edCompressedSize) =$= decompress
+  source .| CB.isolate (fromIntegral edCompressedSize) .| decompress
   where
     source = CB.sourceIOHandle $ do
       h <- openFile (toFilePath path) ReadMode
@@ -231,7 +232,7 @@ sourceEntry path EntryDescription {..} d =
           return h
     decompress = if d
       then decompressingPipe edCompression
-      else awaitForever yield
+      else C.awaitForever C.yield
 
 -- | Undertake /all/ actions specified as the fourth argument of the
 -- function. This transforms given pending actions so they can be performed
@@ -414,13 +415,13 @@ sinkEntry h s o src EditingActions {..} = do
         , edComment          = M.lookup s eaEntryComment <|> oldComment
         , edExtraField       = extraField }
   B.hPut h (runPut (putHeader LocalHeader s desc0))
-  DataDescriptor {..} <- runResourceT $
+  DataDescriptor {..} <- C.runConduitRes $
     if recompression
       then
         if compressed == Store
-          then src $$ sinkData h compression
-          else src =$= decompressingPipe compressed $$ sinkData h compression
-      else src $$ sinkData h Store
+          then src .| sinkData h compression
+          else src .| decompressingPipe compressed .| sinkData h compression
+      else src .| sinkData h Store
   afterStreaming <- hTell h
   let desc1 = case o of
         GenericOrigin -> desc0
@@ -460,9 +461,9 @@ sinkData h compression = do
       Store   -> withCompression
         dataSink
       Deflate -> withCompression $
-        Z.compress 9 (Z.WindowBits (-15)) =$= dataSink
+        Z.compress 9 (Z.WindowBits (-15)) .| dataSink
       BZip2   -> withCompression $
-        BZ.bzip2 =$= dataSink
+        BZ.bzip2 .| dataSink
   return DataDescriptor
     { ddCRC32            = fromIntegral crc32
     , ddCompressedSize   = compressedSize
@@ -968,7 +969,7 @@ decompressingPipe
   :: MonadResource m
   => CompressionMethod
   -> Conduit ByteString m ByteString
-decompressingPipe Store   = awaitForever yield
+decompressingPipe Store   = C.awaitForever C.yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 decompressingPipe BZip2   = BZ.bunzip2
 

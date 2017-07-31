@@ -13,7 +13,6 @@ import Control.Monad.Catch (catchIOError)
 import Control.Monad.IO.Class
 import Data.Bits (complement)
 import Data.ByteString (ByteString)
-import Data.Conduit (yield)
 import Data.Foldable (foldl')
 import Data.List (intercalate)
 import Data.Map (Map, (!))
@@ -31,6 +30,7 @@ import Test.QuickCheck
 import qualified Data.ByteString         as B
 import qualified Data.ByteString.Builder as LB
 import qualified Data.ByteString.Lazy    as LB
+import qualified Data.Conduit            as C
 import qualified Data.Conduit.List       as CL
 import qualified Data.Map                as M
 import qualified Data.Set                as E
@@ -325,7 +325,7 @@ sinkEntrySpec =
   context "when an entry is sunk" $
     it "is there" $ \path -> property $ \m b s -> do
       info <- createArchive path $ do
-        sinkEntry m (yield b) s
+        sinkEntry m (C.yield b) s
         commit
         (,) <$> sourceEntry s (CL.foldMap id)
           <*> (edCompression . (! s) <$> getEntries)
