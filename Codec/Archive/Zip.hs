@@ -143,9 +143,9 @@ import Codec.Archive.Zip.Type
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Resource (ResourceT, runResourceT, MonadResource)
+import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.ByteString (ByteString)
-import Data.Conduit (Source, Sink, ($$), yield)
+import Data.Conduit (Source, Sink, (.|))
 import Data.Map.Strict (Map, (!))
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
@@ -154,6 +154,7 @@ import Data.Word (Word16)
 import Path
 import Path.IO
 import qualified Codec.Archive.Zip.Internal as I
+import qualified Data.Conduit               as C
 import qualified Data.Conduit.Binary        as CB
 import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as M
@@ -323,7 +324,7 @@ sourceEntry
      -- ^ Contents of the entry (if found)
 sourceEntry s sink = do
   src <- getEntrySource s
-  (liftIO . runResourceT) (src $$ sink)
+  (liftIO . C.runConduitRes) (src .| sink)
 
 -- | Save a specific archive entry as a file in the file system.
 --
@@ -385,7 +386,7 @@ addEntry
   -> ByteString        -- ^ Entry contents
   -> EntrySelector     -- ^ Name of entry to add
   -> ZipArchive ()
-addEntry t b s = addPending (I.SinkEntry t (yield b) s)
+addEntry t b s = addPending (I.SinkEntry t (C.yield b) s)
 
 -- | Stream data from the specified source to an archive entry.
 
