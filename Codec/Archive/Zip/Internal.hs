@@ -31,8 +31,7 @@ import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Conduit, Source, Sink, (.|))
-import Data.Conduit.Internal (zipSinks)
+import Data.Conduit (Conduit, Source, Sink, (.|), ZipSink (..))
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
@@ -454,9 +453,13 @@ sinkData
      -- ^ 'Sink' where to stream data
 sinkData h compression = do
   let sizeSink  = CL.fold (\acc input -> fromIntegral (B.length input) + acc) 0
-      dataSink  = fst <$> zipSinks sizeSink (CB.sinkHandle h)
-      withCompression = zipSinks (zipSinks sizeSink crc32Sink)
-  ((uncompressedSize, crc32), compressedSize) <-
+      dataSink  = getZipSink $
+        ZipSink sizeSink <* ZipSink (CB.sinkHandle h)
+      withCompression sink = getZipSink $
+        (,,) <$> ZipSink sizeSink
+             <*> ZipSink crc32Sink
+             <*> ZipSink sink
+  (uncompressedSize, crc32, compressedSize) <-
     case compression of
       Store   -> withCompression
         dataSink
