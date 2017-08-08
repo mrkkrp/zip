@@ -80,6 +80,8 @@
 -- >   B.putStrLn bs
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Codec.Archive.Zip
   ( -- * Types
@@ -98,6 +100,7 @@ module Codec.Archive.Zip
   , ZipException (..)
     -- * Archive monad
   , ZipArchive
+  , ZipState
   , createArchive
   , withArchive
     -- * Retrieving information
@@ -141,8 +144,10 @@ where
 
 import Codec.Archive.Zip.Type
 import Control.Monad
+import Control.Monad.Base (MonadBase (..))
 import Control.Monad.Catch
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink, (.|))
@@ -179,7 +184,25 @@ newtype ZipArchive a = ZipArchive
              , MonadCatch
              , MonadMask )
 
--- | Internal state record used by the 'ZipArchive' monad.
+-- | @since 0.2.0
+
+instance MonadBase IO ZipArchive where
+  liftBase = liftIO
+
+-- | @since 0.2.0
+
+instance MonadBaseControl IO ZipArchive where
+  type StM ZipArchive a = (a, ZipState)
+  liftBaseWith f = ZipArchive . StateT $ \s ->
+    (\x -> (x, s)) <$> f (flip runStateT s . unZipArchive)
+  {-# INLINEABLE liftBaseWith #-}
+  restoreM       = ZipArchive . StateT . const . return
+  {-# INLINEABLE restoreM #-}
+
+-- | Internal state record used by the 'ZipArchive' monad. This is only
+-- exported for use with 'MonadBaseControl' methods, you can't look inside.
+--
+-- @since 0.2.0
 
 data ZipState = ZipState
   { zsFilePath  :: Path Abs File
@@ -197,11 +220,11 @@ data ZipState = ZipState
 -- specified file if it already exists. See 'withArchive' if you want to
 -- work with an existing archive.
 
-createArchive :: (MonadIO m, MonadCatch m)
+createArchive :: MonadIO m
   => Path b File       -- ^ Location of archive file to create
   -> ZipArchive a      -- ^ Actions that form archive's content
   -> m a
-createArchive path m = do
+createArchive path m = liftIO $ do
   apath <- makeAbsolute path
   ignoringAbsence (removeFile apath)
   let st = ZipState
@@ -210,7 +233,7 @@ createArchive path m = do
         , zsArchive  = ArchiveDescription Nothing 0 0
         , zsActions  = S.empty }
       action = unZipArchive (liftM2 const m commit)
-  liftIO (evalStateT action st)
+  evalStateT action st
 
 -- | Work with an existing archive. See 'createArchive' if you want to
 -- create a new archive instead.
@@ -237,11 +260,11 @@ createArchive path m = do
 -- design decision to make it impossible to create non-portable archives
 -- with this library.
 
-withArchive :: (MonadIO m, MonadThrow m)
+withArchive :: MonadIO m
   => Path b File       -- ^ Location of archive to work with
   -> ZipArchive a      -- ^ Actions on that archive
   -> m a
-withArchive path m = do
+withArchive path m = liftIO $ do
   apath           <- canonicalizePath path
   (desc, entries) <- liftIO (I.scanArchive apath)
   let st = ZipState
