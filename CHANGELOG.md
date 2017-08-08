@@ -1,3 +1,12 @@
+## Zip 0.2.0
+
+* Added `MonadBase` and `MonadBaseControl` instances for the `ZipArchive`
+  monad. Also exported the `ZipState` type without revealing its data
+  constructor and records.
+
+* Dropped `MonadThrow` and `MonadCatch` constraints for `createArchive` and
+  `withArchive`.
+
 ## Zip 0.1.11
 
 * Minor refactoring.
