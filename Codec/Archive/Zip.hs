@@ -79,6 +79,7 @@
 -- >   bs      <- withArchive path (getEntry s)
 -- >   B.putStrLn bs
 
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -143,14 +144,14 @@ module Codec.Archive.Zip
 where
 
 import Codec.Archive.Zip.Type
-import Control.Monad
 import Control.Monad.Base (MonadBase (..))
 import Control.Monad.Catch
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict hiding (forM_, mapM_)
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.ByteString (ByteString)
 import Data.Conduit (Source, Sink, (.|))
+import Data.Foldable (forM_, mapM_)
 import Data.Map.Strict (Map, (!))
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
@@ -158,6 +159,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Word (Word16)
 import Path
 import Path.IO
+import Prelude hiding (mapM_)
 import qualified Codec.Archive.Zip.Internal as I
 import qualified Data.Conduit               as C
 import qualified Data.Conduit.Binary        as CB
@@ -165,6 +167,10 @@ import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as M
 import qualified Data.Sequence              as S
 import qualified Data.Set                   as E
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -381,7 +387,7 @@ checkEntry s = do
 unpackInto :: Path b Dir -> ZipArchive ()
 unpackInto dir' = do
   selectors <- M.keysSet <$> getEntries
-  unless (null selectors) $ do
+  unless (E.null selectors) $ do
     dir <- liftIO (makeAbsolute dir')
     liftIO (ensureDir dir)
     let dirs = E.map (parent . (dir </>) . unEntrySelector) selectors

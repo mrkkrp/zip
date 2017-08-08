@@ -9,6 +9,7 @@
 --
 -- Low-level, non-public concepts and operations.
 
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Codec.Archive.Zip.Internal
@@ -22,7 +23,7 @@ where
 
 import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
-import Control.Applicative (many, (<|>))
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Maybe
@@ -59,6 +60,11 @@ import qualified Data.Sequence       as S
 import qualified Data.Set            as E
 import qualified Data.Text           as T
 import qualified Data.Text.Encoding  as T
+
+#if !MIN_VERSION_base(4,8,0)
+makeVersion :: [Int] -> Version
+makeVersion b = Version b []
+#endif
 
 ----------------------------------------------------------------------------
 -- Data types
