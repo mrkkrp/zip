@@ -38,6 +38,13 @@ import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified System.FilePath.Windows as Windows
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+
+makeVersion :: [Int] -> Version
+makeVersion b = Version b []
+#endif
+
 -- | Zip tests. Please note that Zip64 feature is not currently tested
 -- automatically because for it to expose itself we need > 4GB of
 -- data. Handling such quantities of data locally is problematic and even
