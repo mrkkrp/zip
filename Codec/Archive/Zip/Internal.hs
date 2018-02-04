@@ -22,6 +22,7 @@ where
 
 import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
+import Conduit (PrimMonad)
 import Control.Applicative (many, (<|>))
 import Control.Monad
 import Control.Monad.Catch
@@ -31,7 +32,7 @@ import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.Char (ord)
-import Data.Conduit (Conduit, Source, Sink, (.|), ZipSink (..))
+import Data.Conduit (ConduitT, (.|), ZipSink (..))
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
@@ -43,6 +44,7 @@ import Data.Serialize
 import Data.Text (Text)
 import Data.Time
 import Data.Version
+import Data.Void
 import Data.Word (Word16, Word32)
 import Numeric.Natural (Natural)
 import Path
@@ -67,7 +69,9 @@ import qualified Data.Text.Encoding  as T
 -- archive.
 
 data PendingAction
-  = SinkEntry CompressionMethod (Source (ResourceT IO) ByteString) EntrySelector
+  = SinkEntry CompressionMethod
+              (ConduitT () ByteString (ResourceT IO) ())
+              EntrySelector
     -- ^ Add entry given its 'Source'
   | CopyEntry (Path Abs File) EntrySelector EntrySelector
     -- ^ Copy an entry form another archive without re-compression
@@ -97,7 +101,8 @@ data PendingAction
 
 data ProducingActions = ProducingActions
   { paCopyEntry :: Map (Path Abs File) (Map EntrySelector EntrySelector)
-  , paSinkEntry :: Map EntrySelector (Source (ResourceT IO) ByteString) }
+  , paSinkEntry :: Map EntrySelector (ConduitT () ByteString (ResourceT IO) ())
+  }
 
 -- | Collection of editing actions, that is, actions that modify already
 -- existing entries.
@@ -212,11 +217,11 @@ scanArchive path = withBinaryFile (toFilePath path) ReadMode $ \h -> do
 -- compressed or uncompressed depending on the third argument.
 
 sourceEntry
-  :: MonadResource m
+  :: (PrimMonad m, MonadThrow m, MonadResource m)
   => Path Abs File     -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Bool              -- ^ Should we stream uncompressed data?
-  -> Source m ByteString -- ^ Source of uncompressed data
+  -> ConduitT () ByteString m () -- ^ Source of uncompressed data
 sourceEntry path EntryDescription {..} d =
   source .| CB.isolate (fromIntegral edCompressedSize) .| decompress
   where
@@ -377,7 +382,7 @@ sinkEntry
   :: Handle            -- ^ Opened 'Handle' of zip archive file
   -> EntrySelector     -- ^ Name of entry to add
   -> EntryOrigin       -- ^ Origin of entry (can contain additional info)
-  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
+  -> ConduitT () ByteString (ResourceT IO) () -- ^ Source of entry contents
   -> EditingActions    -- ^ Additional info that can influence result
   -> IO (EntrySelector, EntryDescription)
      -- ^ Info to generate central directory file headers later
@@ -449,7 +454,7 @@ sinkEntry h s o src EditingActions {..} = do
 sinkData
   :: Handle            -- ^ Opened 'Handle' of zip archive file
   -> CompressionMethod -- ^ Compression method to apply
-  -> Sink ByteString (ResourceT IO) DataDescriptor
+  -> ConduitT ByteString Void (ResourceT IO) DataDescriptor
      -- ^ 'Sink' where to stream data
 sinkData h compression = do
   let sizeSink  = CL.fold (\acc input -> fromIntegral (B.length input) + acc) 0
@@ -969,16 +974,16 @@ getZipVersion zip64 m = max zip64ver mver
 -- method.
 
 decompressingPipe
-  :: MonadResource m
+  :: (PrimMonad m, MonadThrow m, MonadResource m)
   => CompressionMethod
-  -> Conduit ByteString m ByteString
+  -> ConduitT ByteString ByteString m ()
 decompressingPipe Store   = C.awaitForever C.yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 decompressingPipe BZip2   = BZ.bunzip2
 
 -- | Sink that calculates CRC32 check sum for incoming stream.
 
-crc32Sink :: Sink ByteString (ResourceT IO) Word32
+crc32Sink :: ConduitT ByteString Void (ResourceT IO) Word32
 crc32Sink = CL.fold crc32Update 0
 
 -- | Convert 'UTCTime' to MS-DOS time format.

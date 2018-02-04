@@ -143,6 +143,7 @@ module Codec.Archive.Zip
 where
 
 import Codec.Archive.Zip.Type
+import Conduit (PrimMonad)
 import Control.Monad
 import Control.Monad.Base (MonadBase (..))
 import Control.Monad.Catch
@@ -150,11 +151,12 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.ByteString (ByteString)
-import Data.Conduit (Source, Sink, (.|))
+import Data.Conduit (ConduitT, (.|))
 import Data.Map.Strict (Map, (!))
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
+import Data.Void
 import Data.Word (Word16)
 import Path
 import Path.IO
@@ -324,9 +326,9 @@ getEntry s = sourceEntry s (CL.foldMap id)
 -- @since 0.1.3
 
 getEntrySource
-  :: MonadResource m
+  :: (PrimMonad m, MonadThrow m, MonadResource m)
   => EntrySelector
-  -> ZipArchive (Source m ByteString)
+  -> ZipArchive (ConduitT () ByteString m ())
 getEntrySource s = do
   path  <- getFilePath
   mdesc <- M.lookup s <$> getEntries
@@ -341,7 +343,7 @@ getEntrySource s = do
 sourceEntry
   :: EntrySelector
      -- ^ Selector that identifies archive entry
-  -> Sink ByteString (ResourceT IO) a
+  -> ConduitT ByteString Void (ResourceT IO) a
      -- ^ Sink where to stream entry contents
   -> ZipArchive a
      -- ^ Contents of the entry (if found)
@@ -415,7 +417,7 @@ addEntry t b s = addPending (I.SinkEntry t (C.yield b) s)
 
 sinkEntry
   :: CompressionMethod -- ^ Compression method to use
-  -> Source (ResourceT IO) ByteString -- ^ Source of entry contents
+  -> ConduitT () ByteString (ResourceT IO) () -- ^ Source of entry contents
   -> EntrySelector     -- ^ Name of entry to add
   -> ZipArchive ()
 sinkEntry t src s = addPending (I.SinkEntry t src s)

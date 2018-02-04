@@ -1,3 +1,8 @@
+## Zip 0.3.0
+
+* Works with `conduit-1.3.0`, `conduit-extra-1.3.0`, `resourcet-1.2.0` and
+  `bzlib-conduit-0.3.0`.
+
 ## Zip 0.2.0
 
 * Added `MonadBase` and `MonadBaseControl` instances for the `ZipArchive`
