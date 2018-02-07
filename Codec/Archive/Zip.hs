@@ -11,13 +11,10 @@
 -- There are three things that should be clarified right away, to avoid
 -- confusion in the future.
 --
--- First, we use the 'EntrySelector' type that can be obtained from 'Path'
--- 'Rel' 'File' paths. This method may seem awkward at first, but it will
--- protect you from the problems with portability when your archive is
--- unpacked on a different platform. Using well-typed paths is also
--- something you should consider doing in your projects anyway. Even if you
--- don't want to use the "Path" module in your project, it's easy to marshal
--- 'FilePath' to 'Path' just before using functions from the library.
+-- First, we use the 'EntrySelector' type that can be obtained from relative
+-- 'FilePath's (paths to directories are not allowed). This method may seem
+-- awkward at first, but it will protect you from the problems with
+-- portability when your archive is unpacked on a different platform.
 --
 -- The second thing, that is rather a consequence of the first, is that
 -- there is no way to add directories, or to be precise, /empty directories/
@@ -38,48 +35,41 @@
 -- An example of a program that prints a list of archive entries:
 --
 -- > import Codec.Archive.Zip
--- > import Path.IO (resolveFile')
 -- > import System.Environment (getArgs)
 -- > import qualified Data.Map as M
 -- >
 -- > main :: IO ()
 -- > main = do
--- >   [fp]    <- getArgs
--- >   path    <- resolveFile' fp
+-- >   [path]  <- getArgs
 -- >   entries <- withArchive path (M.keys <$> getEntries)
 -- >   mapM_ print entries
 --
 -- Create a Zip archive with a “Hello World” file:
 --
 -- > import Codec.Archive.Zip
--- > import Path (parseRelFile)
--- > import Path.IO (resolveFile')
 -- > import System.Environment (getArgs)
 -- >
 -- > main :: IO ()
 -- > main = do
--- >   [fp]    <- getArgs
--- >   path    <- resolveFile' fp
--- >   s       <- parseRelFile "hello-world.txt" >>= mkEntrySelector
+-- >   [path] <- getArgs
+-- >   s      <- mkEntrySelector "hello-world.txt"
 -- >   createArchive path (addEntry Store "Hello, World!" s)
 --
 -- Extract contents of a specific file and print them:
 --
 -- > import Codec.Archive.Zip
--- > import Path (parseRelFile)
--- > import Path.IO (resolveFile')
 -- > import System.Environment (getArgs)
 -- > import qualified Data.ByteString.Char8 as B
 -- >
 -- > main :: IO ()
 -- > main = do
--- >   [fp,f]  <- getArgs
--- >   path    <- resolveFile' fp
--- >   s       <- parseRelFile f >>= mkEntrySelector
--- >   bs      <- withArchive path (getEntry s)
+-- >   [path,f] <- getArgs
+-- >   s        <- mkEntrySelector f
+-- >   bs       <- withArchive path (getEntry s)
 -- >   B.putStrLn bs
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TypeFamilies               #-}
 
@@ -158,15 +148,18 @@ import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Data.Void
 import Data.Word (Word16)
-import Path
-import Path.IO
+import System.Directory
+import System.FilePath ((</>))
+import System.IO.Error (isDoesNotExistError)
 import qualified Codec.Archive.Zip.Internal as I
 import qualified Data.Conduit               as C
 import qualified Data.Conduit.Binary        as CB
 import qualified Data.Conduit.List          as CL
+import qualified Data.DList                 as DList
 import qualified Data.Map.Strict            as M
 import qualified Data.Sequence              as S
 import qualified Data.Set                   as E
+import qualified System.FilePath            as FP
 
 ----------------------------------------------------------------------------
 -- Archive monad
@@ -207,8 +200,8 @@ instance MonadBaseControl IO ZipArchive where
 -- @since 0.2.0
 
 data ZipState = ZipState
-  { zsFilePath  :: Path Abs File
-    -- ^ Absolute path to zip archive
+  { zsFilePath  :: FilePath
+    -- ^ Path to zip archive
   , zsEntries   :: Map EntrySelector EntryDescription
     -- ^ Actual collection of entries
   , zsArchive   :: ArchiveDescription
@@ -223,7 +216,7 @@ data ZipState = ZipState
 -- work with an existing archive.
 
 createArchive :: MonadIO m
-  => Path b File       -- ^ Location of archive file to create
+  => FilePath          -- ^ Location of archive file to create
   -> ZipArchive a      -- ^ Actions that form archive's content
   -> m a
 createArchive path m = liftIO $ do
@@ -263,7 +256,7 @@ createArchive path m = liftIO $ do
 -- with this library.
 
 withArchive :: MonadIO m
-  => Path b File       -- ^ Location of archive to work with
+  => FilePath          -- ^ Location of archive to work with
   -> ZipArchive a      -- ^ Actions on that archive
   -> m a
 withArchive path m = liftIO $ do
@@ -327,7 +320,7 @@ getEntry s = sourceEntry s (CL.foldMap id)
 
 getEntrySource
   :: (PrimMonad m, MonadThrow m, MonadResource m)
-  => EntrySelector
+  => EntrySelector     -- ^ Selector that identifies archive entry
   -> ZipArchive (ConduitT () ByteString m ())
 getEntrySource s = do
   path  <- getFilePath
@@ -357,9 +350,9 @@ sourceEntry s sink = do
 
 saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
-  -> Path b File       -- ^ Where to save the file
+  -> FilePath          -- ^ Where to save the file
   -> ZipArchive ()
-saveEntry s path = sourceEntry s (CB.sinkFile (toFilePath path))
+saveEntry s path = sourceEntry s (CB.sinkFile path)
 
 -- | Calculate CRC32 check sum and compare it with the value read from the
 -- archive. The function returns 'True' when the check sums are the
@@ -380,14 +373,14 @@ checkEntry s = do
 -- | Unpack the entire archive into the specified directory. The directory
 -- will be created if it does not exist.
 
-unpackInto :: Path b Dir -> ZipArchive ()
+unpackInto :: FilePath -> ZipArchive ()
 unpackInto dir' = do
   selectors <- M.keysSet <$> getEntries
   unless (null selectors) $ do
     dir <- liftIO (makeAbsolute dir')
-    liftIO (ensureDir dir)
-    let dirs = E.map (parent . (dir </>) . unEntrySelector) selectors
-    forM_ dirs (liftIO . ensureDir)
+    liftIO (createDirectoryIfMissing True dir)
+    let dirs = E.map (FP.takeDirectory . (dir </>) . unEntrySelector) selectors
+    forM_ dirs (liftIO . createDirectoryIfMissing True)
     forM_ selectors $ \s ->
       saveEntry s (dir </> unEntrySelector s)
 
@@ -426,14 +419,13 @@ sinkEntry t src s = addPending (I.SinkEntry t src s)
 
 loadEntry
   :: CompressionMethod -- ^ Compression method to use
-  -> (Path Abs File -> ZipArchive EntrySelector) -- ^ How to get 'EntrySelector'
-  -> Path b File       -- ^ Path to file to add
+  -> EntrySelector     -- ^ Name of entry to add
+  -> FilePath          -- ^ Path to file to add
   -> ZipArchive ()
-loadEntry t f path = do
+loadEntry t s path = do
   apath   <- liftIO (canonicalizePath path)
-  s       <- f apath
   modTime <- liftIO (getModificationTime path)
-  let src = CB.sourceFile (toFilePath apath)
+  let src = CB.sourceFile apath
   addPending (I.SinkEntry t src s)
   addPending (I.SetModTime modTime s)
 
@@ -441,9 +433,9 @@ loadEntry t f path = do
 -- exist in that archive, 'EntryDoesNotExist' will be eventually thrown.
 
 copyEntry
-  :: Path b File       -- ^ Path to archive to copy from
+  :: FilePath          -- ^ Path to archive to copy from
   -> EntrySelector     -- ^ Name of entry (in source archive) to copy
-  -> EntrySelector     -- ^ Name of entry to insert (in actual archive)
+  -> EntrySelector     -- ^ Name of entry to insert (in current archive)
   -> ZipArchive ()
 copyEntry path s' s = do
   apath <- liftIO (canonicalizePath path)
@@ -452,17 +444,20 @@ copyEntry path s' s = do
 -- | Add an entire directory to the archive. Please note that due to the
 -- design of the library, empty sub-directories won't be added.
 --
--- The action can throw the same exceptions as 'listDirRecur' and
--- 'InvalidEntrySelector'.
+-- The action can throw 'InvalidEntrySelector'.
 
 packDirRecur
   :: CompressionMethod -- ^ Compression method to use
-  -> (Path Abs File -> ZipArchive EntrySelector) -- ^ How to get 'EntrySelector'
-  -> Path b Dir        -- ^ Path to directory to add
+  -> (FilePath -> ZipArchive EntrySelector)
+     -- ^ How to get 'EntrySelector' from a path relative to the root of the
+     -- directory we pack
+  -> FilePath          -- ^ Path to directory to add
   -> ZipArchive ()
 packDirRecur t f path = do
-  files <- snd <$> liftIO (listDirRecur path)
-  mapM_ (loadEntry t f) files
+  files <- liftIO (listDirRecur path)
+  forM_ files $ \x -> do
+    s <- f x
+    loadEntry t s (path </> x)
 
 -- | Rename an entry in the archive. If the entry does not exist, nothing
 -- will happen.
@@ -580,7 +575,7 @@ commit = do
   odesc    <- getArchiveDescription
   oentries <- getEntries
   actions  <- getPending
-  exists   <- doesFileExist file
+  exists   <- liftIO (doesFileExist file)
   unless (S.null actions && exists) $ do
     liftIO (I.commit file odesc oentries actions)
     -- NOTE The most robust way to update internal description of the
@@ -599,7 +594,7 @@ commit = do
 -- | Get the path of the actual archive file from inside of 'ZipArchive'
 -- monad.
 
-getFilePath :: ZipArchive (Path Abs File)
+getFilePath :: ZipArchive FilePath
 getFilePath = ZipArchive (gets zsFilePath)
 
 -- | Get the collection of pending actions.
@@ -617,3 +612,34 @@ modifyActions f = ZipArchive (modify g)
 
 addPending :: I.PendingAction -> ZipArchive ()
 addPending a = modifyActions (|> a)
+
+-- | Recursively list a directory. Do not return paths to empty directories.
+
+listDirRecur :: FilePath -> IO [FilePath]
+listDirRecur path = DList.toList <$> go ""
+  where
+    go adir = do
+      let cdir = path </> adir
+      raw <- listDirectory cdir
+      fmap mconcat . forM raw $ \case
+        ""   -> return mempty
+        "."  -> return mempty
+        ".." -> return mempty
+        x    -> do
+          let fullx = cdir </> x
+              adir' = adir </> x
+          isFile <- doesFileExist      fullx
+          isDir  <- doesDirectoryExist fullx
+          if isFile
+            then return (DList.singleton adir')
+            else if isDir
+                   then go adir'
+                   else return mempty
+
+-- | Perform an action ignoring IO exceptions it may throw.
+
+ignoringAbsence :: IO () -> IO ()
+ignoringAbsence io = catchJust select io handler
+  where
+    select e = if isDoesNotExistError e then Just e else Nothing
+    handler = const (return ())

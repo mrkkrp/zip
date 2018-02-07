@@ -24,8 +24,9 @@ import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
 import Conduit (PrimMonad)
 import Control.Applicative (many, (<|>))
+import Control.Exception (bracketOnError)
 import Control.Monad
-import Control.Monad.Catch
+import Control.Monad.Catch (MonadThrow (..))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Resource (ResourceT, MonadResource)
 import Data.Bits
@@ -38,7 +39,6 @@ import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
 import Data.Maybe (fromJust, catMaybes, isNothing)
-import Data.Monoid ((<>))
 import Data.Sequence (Seq, (><), (|>))
 import Data.Serialize
 import Data.Text (Text)
@@ -47,9 +47,9 @@ import Data.Version
 import Data.Void
 import Data.Word (Word16, Word32)
 import Numeric.Natural (Natural)
-import Path
+import System.Directory
+import System.FilePath
 import System.IO
-import System.PlanB
 import qualified Data.ByteString     as B
 import qualified Data.Conduit        as C
 import qualified Data.Conduit.BZlib  as BZ
@@ -73,7 +73,7 @@ data PendingAction
               (ConduitT () ByteString (ResourceT IO) ())
               EntrySelector
     -- ^ Add entry given its 'Source'
-  | CopyEntry (Path Abs File) EntrySelector EntrySelector
+  | CopyEntry FilePath EntrySelector EntrySelector
     -- ^ Copy an entry form another archive without re-compression
   | RenameEntry EntrySelector EntrySelector
     -- ^ Change name the entry inside archive
@@ -100,7 +100,7 @@ data PendingAction
 -- archive.
 
 data ProducingActions = ProducingActions
-  { paCopyEntry :: Map (Path Abs File) (Map EntrySelector EntrySelector)
+  { paCopyEntry :: Map FilePath (Map EntrySelector EntrySelector)
   , paSinkEntry :: Map EntrySelector (ConduitT () ByteString (ResourceT IO) ())
   }
 
@@ -192,9 +192,9 @@ zipVersion = Version [4,6] []
 -- with this library.
 
 scanArchive
-  :: Path Abs File     -- ^ Path to archive to scan
+  :: FilePath     -- ^ Path to archive to scan
   -> IO (ArchiveDescription, Map EntrySelector EntryDescription)
-scanArchive path = withBinaryFile (toFilePath path) ReadMode $ \h -> do
+scanArchive path = withBinaryFile path ReadMode $ \h -> do
   mecdOffset <- locateECD path h
   case mecdOffset of
     Just ecdOffset -> do
@@ -218,7 +218,7 @@ scanArchive path = withBinaryFile (toFilePath path) ReadMode $ \h -> do
 
 sourceEntry
   :: (PrimMonad m, MonadThrow m, MonadResource m)
-  => Path Abs File     -- ^ Path to archive that contains the entry
+  => FilePath          -- ^ Path to archive that contains the entry
   -> EntryDescription  -- ^ Information needed to extract entry of interest
   -> Bool              -- ^ Should we stream uncompressed data?
   -> ConduitT () ByteString m () -- ^ Source of uncompressed data
@@ -226,7 +226,7 @@ sourceEntry path EntryDescription {..} d =
   source .| CB.isolate (fromIntegral edCompressedSize) .| decompress
   where
     source = CB.sourceIOHandle $ do
-      h <- openFile (toFilePath path) ReadMode
+      h <- openFile path ReadMode
       hSeek h AbsoluteSeek (fromIntegral edOffset)
       localHeader <- B.hGet h 30
       case runGet getLocalHeaderGap localHeader of
@@ -243,26 +243,41 @@ sourceEntry path EntryDescription {..} d =
 -- in one pass, and then they are performed in the most efficient way.
 
 commit
-  :: Path Abs File     -- ^ Location of archive file to edit or create
+  :: FilePath          -- ^ Location of archive file to edit or create
   -> ArchiveDescription -- ^ Archive description
   -> Map EntrySelector EntryDescription -- ^ Current list of entires
   -> Seq PendingAction -- ^ Collection of pending actions
   -> IO ()
 commit path ArchiveDescription {..} entries xs =
-  withNewFile (overrideIfExists      <>
-               nameTemplate ".zip"   <>
-               tempDir (parent path) <>
-               moveByRenaming) path $ \temp -> do
+  withNewFile path $ \h -> do
     let (ProducingActions coping sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
         comment = predictComment adComment xs
-    withBinaryFile (toFilePath temp) WriteMode $ \h -> do
-      copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
-        copyEntries h srcPath (coping ! srcPath) editing)
-      let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
-      sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
-        sinkEntry h selector GenericOrigin (sinking ! selector) editing)
-      writeCD h comment (copiedCD `M.union` sunkCD)
+    copiedCD <- M.unions <$> forM (M.keys coping) (\srcPath ->
+      copyEntries h srcPath (coping ! srcPath) editing)
+    let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
+    sunkCD   <- M.fromList <$> forM sinkingKeys (\selector ->
+      sinkEntry h selector GenericOrigin (sinking ! selector) editing)
+    writeCD h comment (copiedCD `M.union` sunkCD)
+
+-- | Create a new file with the guarantee that in case of exception the old
+-- file will be preserved intact. The file is only updated\/replaced if the
+-- second argument finishes without exceptions.
+
+withNewFile
+  :: FilePath          -- ^ Name of file to create
+  -> (Handle -> IO ()) -- ^ Action that writes to given 'Handle'
+  -> IO ()
+withNewFile fpath action =
+  bracketOnError allocate release $ \(path, h) -> do
+    action h
+    hClose h
+    renameFile path fpath
+  where
+    allocate = openBinaryTempFile (takeDirectory fpath) ".zip"
+    release (path, h) = do
+      hClose h
+      removeFile path
 
 -- | Determine what comment in new archive will look like given its original
 -- value and a collection of pending actions.
@@ -279,7 +294,7 @@ predictComment original xs =
 -- actions that re-create those entires.
 
 toRecreatingActions
-  :: Path Abs File     -- ^ Name of the archive file where entires are found
+  :: FilePath     -- ^ Name of the archive file where entires are found
   -> Map EntrySelector EntryDescription -- ^ Actual list of entires
   -> Seq PendingAction -- ^ Actions that recreate the archive entries
 toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
@@ -360,7 +375,7 @@ optimize = foldl' f
 
 copyEntries
   :: Handle            -- ^ Opened 'Handle' of zip archive file
-  -> Path Abs File     -- ^ Path to file from which to copy the entries
+  -> FilePath          -- ^ Path to the file to copy the entries from
   -> Map EntrySelector EntrySelector
      -- ^ 'Map' from original name to name to use in new archive
   -> EditingActions    -- ^ Additional info that can influence result
@@ -586,8 +601,7 @@ getCDHeader = do
             , edOffset           = z64efOffset           z64ef
             , edComment = if commentSize == 0 then Nothing else comment
             , edExtraField       = extraField }
-      in return $ (,desc) <$>
-         (fileName >>= parseRelFile . T.unpack >>= mkEntrySelector)
+      in return $ (,desc) <$> (fileName >>= mkEntrySelector . T.unpack)
 
 -- | Parse an extra-field.
 
@@ -796,7 +810,7 @@ putECD totalCount cdSize cdOffset mcomment = do
 -- | Find absolute offset of end of central directory record or, if present,
 -- Zip64 end of central directory record.
 
-locateECD :: Path Abs File -> Handle -> IO (Maybe Integer)
+locateECD :: FilePath -> Handle -> IO (Maybe Integer)
 locateECD path h = sizeCheck
   where
 

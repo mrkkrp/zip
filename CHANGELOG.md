@@ -1,7 +1,20 @@
-## Zip 0.3.0
+## Zip 1.0.0
 
 * Works with `conduit-1.3.0`, `conduit-extra-1.3.0`, `resourcet-1.2.0` and
   `bzlib-conduit-0.3.0`.
+
+* Stop depending on `path`, `path-io`, and `plub-b`.
+
+* Made the module `Codec.Archive.Zip.Type` non-public.
+
+* Remove derived instances of `Data` and `Generic` for `EntrySelector` not
+  to expose its inner structure.
+
+* Change signature of the `loadEntry` function, its second argument is now
+  just `EntrySelector` of the entry to add.
+
+* The second argument of `packDirRecur` now receives paths that are relative
+  to the root of the directory we pack.
 
 ## Zip 0.2.0
 
