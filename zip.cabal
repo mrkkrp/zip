@@ -1,5 +1,5 @@
 name:                 zip
-version:              0.2.0
+version:              1.0.0
 cabal-version:        >= 1.18
 tested-with:          GHC==8.0.2, GHC==8.2.2
 license:              BSD3
