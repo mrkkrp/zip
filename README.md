@@ -165,13 +165,10 @@ The module `Codec.Archive.Zip` provides everything you may need to
 manipulate Zip archives. There are three things that should be clarified
 right away, to avoid confusion in the future.
 
-First, we use the `EntrySelector` type that can be obtained from `Path Rel
-File` paths. This method may seem awkward at first, but it will protect you
-from the problems with portability when your archive is unpacked on a
-different platform. Using well-typed paths is also something you should
-consider doing in your projects anyway. Even if you don't want to use the
-`Path` module in your project, it's easy to marshal `FilePath` to `Path`
-just before using functions from the library.
+First, we use the `EntrySelector` type that can be obtained from relative
+`FilePath`s (paths to directories are not allowed). This method may seem
+awkward at first, but it will protect you from the problems with portability
+when your archive is unpacked on a different platform.
 
 The second thing, that is rather a consequence of the first, is that there
 is no way to add directories, or to be precise, *empty directories* to your
@@ -239,7 +236,7 @@ You can stream from `Source` as well:
 To add contents from a file, use `loadEntry`:
 
 ```haskell
-λ> let toSelector = const $ parseRelFile "my-entry.txt" >>= mkEntrySelector
+λ> let toSelector = const (mkEntrySelector "my-entry.txt")
 λ> createArchive archivePath (loadEntry BZip2 toSelector myFilePath)
 ```
 
@@ -253,8 +250,7 @@ Finally, you can copy an entry from another archive without re-compression
 It's often desirable to just pack a directory:
 
 ```haskell
-λ> let f = stripDir dir >=> mkEntrySelector
-λ> createArchive archivePath (packDirRecur Deflate f dir)
+λ> createArchive archivePath (packDirRecur Deflate mkEntrySelector dir)
 ```
 
 It's also possible to:
