@@ -32,7 +32,7 @@ library
                     , digest           < 0.1
                     , directory        >= 1.2.2   && < 1.4
                     , dlist            >= 0.8     && < 0.9
-                    , exceptions       >= 0.6     && < 0.9
+                    , exceptions       >= 0.6     && < 0.10
                     , filepath         >= 1.2     && < 1.5
                     , monad-control    >= 1.0     && < 1.1
                     , mtl              >= 2.0     && < 3.0
@@ -66,7 +66,7 @@ test-suite tests
                     , containers       >= 0.5.6.2 && < 0.6
                     , directory        >= 1.2.2   && < 1.4
                     , dlist            >= 0.8     && < 0.9
-                    , exceptions       >= 0.6     && < 0.9
+                    , exceptions       >= 0.6     && < 0.10
                     , filepath         >= 1.2     && < 1.5
                     , hspec            >= 2.0     && < 3.0
                     , temporary        >= 1.1     && < 1.3
