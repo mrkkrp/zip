@@ -5,7 +5,6 @@
 [![Stackage Nightly](http://stackage.org/package/zip/badge/nightly)](http://stackage.org/nightly/package/zip)
 [![Stackage LTS](http://stackage.org/package/zip/badge/lts)](http://stackage.org/lts/package/zip)
 [![Build Status](https://travis-ci.org/mrkkrp/zip.svg?branch=master)](https://travis-ci.org/mrkkrp/zip)
-[![Coverage Status](https://coveralls.io/repos/mrkkrp/zip/badge.svg?branch=master&service=github)](https://coveralls.io/github/mrkkrp/zip?branch=master)
 
 * [Why this library is written](#why-this-library-is-written)
     * [zip-archive](#zip-archive)
