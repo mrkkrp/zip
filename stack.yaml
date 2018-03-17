@@ -1,9 +1,0 @@
-resolver: lts-10.0
-packages:
-- '.'
-extra-deps:
-- bzlib-conduit-0.3.0
-- conduit-1.3.0
-- conduit-extra-1.3.0
-- mono-traversable-1.0.8.1
-- resourcet-1.2.0
