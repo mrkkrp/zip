@@ -948,7 +948,11 @@ toVersion x = makeVersion [major, minor]
 
 fromVersion :: Version -> Word16
 fromVersion v = fromIntegral (major * 10 + minor)
-  where (major:minor:_) = versionBranch v ++ repeat 0
+  where (major,minor) =
+          case versionBranch v of
+            v0:v1:_ -> (v0, v1)
+            v0:_    -> (v0, 0)
+            []      -> (0,  0)
 
 -- | Get compression method form its numeric representation.
 
