@@ -362,15 +362,18 @@ sinkEntrySpec =
 loadEntrySpec :: SpecWith FilePath
 loadEntrySpec =
   context "when an entry is loaded" $
-    it "is there" $ \path -> property $ \m b s -> do
+    it "is there" $ \path -> property $ \m b s t -> do
       let vpath = deriveVacant path
       B.writeFile vpath b
+      setModificationTime vpath t
       createArchive path $ do
         loadEntry m s vpath
         commit
         liftIO (removeFile vpath)
         saveEntry s vpath
       B.readFile vpath `shouldReturn` b
+      modTime <- getModificationTime vpath
+      modTime `shouldSatisfy` isCloseTo t
 
 copyEntrySpec :: SpecWith FilePath
 copyEntrySpec =

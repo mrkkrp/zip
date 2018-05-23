@@ -352,7 +352,10 @@ saveEntry
   :: EntrySelector     -- ^ Selector that identifies archive entry
   -> FilePath          -- ^ Where to save the file
   -> ZipArchive ()
-saveEntry s path = sourceEntry s (CB.sinkFile path)
+saveEntry s path = do
+  sourceEntry s (CB.sinkFile path)
+  med <- getEntryDesc s
+  forM_ med (liftIO . setModificationTime path . edModTime)
 
 -- | Calculate CRC32 check sum and compare it with the value read from the
 -- archive. The function returns 'True' when the check sums are the
