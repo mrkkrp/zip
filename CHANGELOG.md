@@ -1,3 +1,7 @@
+## Zip 1.1.0
+
+* Made `saveEntry` and `unpackInto` restore modification time of files.
+
 ## Zip 1.0.0
 
 * Works with `conduit-1.3.0`, `conduit-extra-1.3.0`, `resourcet-1.2.0` and
