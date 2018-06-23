@@ -227,7 +227,7 @@ createArchive path m = liftIO $ do
         , zsEntries  = M.empty
         , zsArchive  = ArchiveDescription Nothing 0 0
         , zsActions  = S.empty }
-      action = unZipArchive (liftM2 const m commit)
+      action = unZipArchive (m <* commit)
   evalStateT action st
 
 -- | Work with an existing archive. See 'createArchive' if you want to
@@ -267,7 +267,7 @@ withArchive path m = liftIO $ do
         , zsEntries  = entries
         , zsArchive  = desc
         , zsActions  = S.empty }
-      action = unZipArchive (liftM2 const m commit)
+      action = unZipArchive (m <* commit)
   liftIO (evalStateT action st)
 
 ----------------------------------------------------------------------------
