@@ -86,3 +86,19 @@ test-suite tests
 source-repository head
   type:               git
   location:           https://github.com/mrkkrp/zip.git
+
+executable haskell-zip-app
+  main-is:            Main.hs
+  hs-source-dirs:     bench-app
+  build-depends:      base             >= 4.7 && < 5.0
+                    , filepath         >= 1.2 && < 1.5
+                    , zip
+  if flag(dev)
+    ghc-options:      -Wall -Werror -Wcompat
+                      -Wincomplete-record-updates
+                      -Wincomplete-uni-patterns
+                      -Wnoncanonical-monad-instances
+                      -Wnoncanonical-monadfail-instances
+  else
+    ghc-options:      -O2 -Wall
+  default-language:   Haskell2010
