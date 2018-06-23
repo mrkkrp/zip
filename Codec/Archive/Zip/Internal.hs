@@ -9,7 +9,10 @@
 --
 -- Low-level, non-public concepts and operations.
 
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Codec.Archive.Zip.Internal
   ( PendingAction (..)
@@ -1037,9 +1040,18 @@ fromMsDosTime MsDosTime {..} = UTCTime
     month   = fromIntegral $ shiftR msDosDate 5 .&. 0x0f
     year    = 1980 + fromIntegral (shiftR msDosDate 9)
 
--- | We use the constants of the type 'Natural' instead of literals to
--- protect ourselves from overflows on 32 bit systems.
+-- We use the constants of the type 'Natural' instead of literals to protect
+-- ourselves from overflows on 32 bit systems.
+--
+-- If we're in development mode, use lower values so the tests get a chance
+-- to check all cases (otherwise we would need to generate way too big
+-- archives on CI).
 
 ffff, ffffffff :: Natural
+#ifdef HASKELL_ZIP_DEV_MODE
+ffff     = 200
+ffffffff = 5000
+#else
 ffff     = 0xffff
 ffffffff = 0xffffffff
+#endif
