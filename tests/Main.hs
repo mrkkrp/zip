@@ -67,6 +67,7 @@ main = hspec $ do
     describe "entry comment"      entryCommentSpec
     describe "setModTime"         setModTimeSpec
     describe "extra field"        extraFieldSpec
+    describe "setExternalFileAttrsSpec" setExternalFileAttrsSpec
     describe "renameEntry"        renameEntrySpec
     describe "deleteEntry"        deleteEntrySpec
     describe "forEntries"         forEntriesSpec
@@ -124,6 +125,7 @@ instance Arbitrary EM where
     content <- arbitrary
     modTime <- arbitrary
     comment <- arbitrary
+    externalFileAttrs <- arbitrary
     extraFieldTag <- arbitrary `suchThat` (/= 1)
     extraFieldContent <- arbitrary `suchThat` ((< 0xffff) . B.length)
     let action = do
@@ -131,6 +133,7 @@ instance Arbitrary EM where
           setModTime modTime s
           setEntryComment comment s
           addExtraField extraFieldTag extraFieldContent s
+          setExternalFileAttrs externalFileAttrs s
     return $ EM s EntryDescription
       { edVersionMadeBy    = undefined
       , edVersionNeeded    = undefined
@@ -141,7 +144,8 @@ instance Arbitrary EM where
       , edUncompressedSize = fromIntegral (B.length content)
       , edOffset           = undefined
       , edComment          = Just comment
-      , edExtraField       = M.singleton extraFieldTag extraFieldContent }
+      , edExtraField       = M.singleton extraFieldTag extraFieldContent
+      , edExternalFileAttrs = externalFileAttrs }
       action
 
 data EC = EC (Map EntrySelector EntryDescription) (ZipArchive ()) deriving Show
@@ -171,6 +175,7 @@ instance Show EntryDescription where
     "\n, edUncompressedSize = " ++ show (edUncompressedSize ed) ++
     "\n, edComment = " ++ show (edComment ed) ++
     "\n, edExtraField = " ++ show (edExtraField ed) ++
+    "\n, edExtFileAttr = " ++ show (edExternalFileAttrs ed) ++
     " }"
 
 instance Show (ZipArchive a) where
@@ -528,6 +533,17 @@ extraFieldSpec = do
           commit
           M.lookup n . edExtraField . (! s) <$> getEntries
         efield `shouldBe` Nothing
+
+setExternalFileAttrsSpec :: SpecWith FilePath
+setExternalFileAttrsSpec =
+  context "when an external file attribute is added (after creation)" $
+    it "sets a custom external file attribute" $ \path -> property $ \attr s -> do
+      attr' <- createArchive path $ do
+        addEntry Store "foo" s
+        setExternalFileAttrs attr s
+        commit
+        edExternalFileAttrs . (! s) <$> getEntries
+      attr' `shouldBe` attr
 
 renameEntrySpec :: SpecWith FilePath
 renameEntrySpec = do

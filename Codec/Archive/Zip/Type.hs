@@ -158,6 +158,9 @@ data EntryDescription = EntryDescription
   , edOffset           :: Natural -- ^ Absolute offset of local file header
   , edComment          :: Maybe Text -- ^ Entry comment
   , edExtraField       :: Map Word16 ByteString -- ^ All extra fields found
+  , edExternalFileAttrs :: Word32 -- ^ External file attributes
+                                  --
+                                  -- @since 1.2.0
   } deriving (Eq, Typeable)
 
 -- | Supported compression methods.

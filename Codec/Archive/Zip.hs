@@ -121,6 +121,7 @@ module Codec.Archive.Zip
   , setModTime
   , addExtraField
   , deleteExtraField
+  , setExternalFileAttrs
   , forEntries
     -- ** Operations on archive as a whole
   , setArchiveComment
@@ -147,7 +148,7 @@ import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Data.Void
-import Data.Word (Word16)
+import Data.Word (Word16, Word32)
 import System.Directory
 import System.FilePath ((</>))
 import System.IO.Error (isDoesNotExistError)
@@ -529,6 +530,17 @@ deleteExtraField
   -> EntrySelector     -- ^ Name of entry to modify
   -> ZipArchive ()
 deleteExtraField n s = addPending (I.DeleteExtraField n s)
+
+-- | Set external file attributes.
+--
+-- @since 1.2.0
+
+setExternalFileAttrs
+  :: Word32            -- ^ External file attributes
+  -> EntrySelector     -- ^ Name of entry to modify
+  -> ZipArchive ()
+setExternalFileAttrs attrs s =
+  addPending (I.SetExternalFileAttributes attrs s)
 
 -- | Perform an action on every entry in the archive.
 

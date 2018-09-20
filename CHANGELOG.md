@@ -1,3 +1,8 @@
+## Zip 1.2.0
+
+* Added the `setExternalFileAttrs` function and the `edExternalFileAttrs`
+  field in the `EntryDescription` record.
+
 ## Zip 1.1.0
 
 * Made `saveEntry` and `unpackInto` restore modification time of files.
