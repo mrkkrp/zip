@@ -98,6 +98,8 @@ data PendingAction
     -- ^ Set comment for entire archive
   | DeleteArchiveComment
     -- ^ Delete comment of entire archive
+  | SetExternalFileAttributes Word32 EntrySelector
+    -- ^ Set an external file attribute for specified entry
 
 -- | Collection of maps describing how to produce entries in resulting
 -- archive.
@@ -116,7 +118,8 @@ data EditingActions = EditingActions
   , eaDeleteComment :: Map EntrySelector ()
   , eaModTime       :: Map EntrySelector UTCTime
   , eaExtraField    :: Map EntrySelector (Map Word16 ByteString)
-  , eaDeleteField   :: Map EntrySelector (Map Word16 ()) }
+  , eaDeleteField   :: Map EntrySelector (Map Word16 ())
+  , eaExtFileAttr   :: Map EntrySelector Word32 }
 
 -- | Origin of entries that can be streamed into archive.
 
@@ -312,7 +315,7 @@ optimize
   -> (ProducingActions, EditingActions) -- ^ Optimized data
 optimize = foldl' f
   ( ProducingActions M.empty M.empty
-  , EditingActions   M.empty M.empty M.empty M.empty M.empty M.empty )
+  , EditingActions   M.empty M.empty M.empty M.empty M.empty M.empty M.empty)
   where
     f (pa, ea) a = case a of
       SinkEntry m src s ->
@@ -357,6 +360,9 @@ optimize = foldl' f
         ( pa
         , ea { eaExtraField = M.alter (er n) s (eaExtraField ea)
              , eaDeleteField = M.alter (ef n ()) s (eaDeleteField ea) } )
+      SetExternalFileAttributes b s ->
+        ( pa
+        , ea { eaExtFileAttr = M.insert s b (eaExtFileAttr ea) })
       _ -> (pa, ea)
     clearEditingFor s ea = ea
       { eaCompression   = M.delete s (eaCompression ea)
@@ -364,7 +370,8 @@ optimize = foldl' f
       , eaDeleteComment = M.delete s (eaDeleteComment ea)
       , eaModTime       = M.delete s (eaModTime ea)
       , eaExtraField    = M.delete s (eaExtraField ea)
-      , eaDeleteField   = M.delete s (eaDeleteField ea) }
+      , eaDeleteField   = M.delete s (eaDeleteField ea)
+      , eaExtFileAttr   = M.delete s (eaExtFileAttr ea) }
     re o n x = if x == o then n else x
     ef k v (Just m) = Just (M.insert k v m)
     ef k v Nothing  = Just (M.singleton k v)
@@ -415,6 +422,9 @@ sinkEntry h s o src EditingActions {..} = do
       modTime = case o of
         GenericOrigin -> currentTime
         Borrowed ed -> edModTime ed
+      extFileAttr = case o of
+        GenericOrigin -> M.findWithDefault 0 s eaExtFileAttr
+        Borrowed _ -> M.findWithDefault 0 s eaExtFileAttr
       oldExtraFields = case o of
         GenericOrigin -> M.empty
         Borrowed ed -> edExtraField ed
@@ -435,7 +445,8 @@ sinkEntry h s o src EditingActions {..} = do
         , edUncompressedSize = 0 -- ↑
         , edOffset           = fromIntegral offset
         , edComment          = M.lookup s eaEntryComment <|> oldComment
-        , edExtraField       = extraField }
+        , edExtraField       = extraField
+        , edExternalFileAttrs = extFileAttr }
   B.hPut h (runPut (putHeader LocalHeader s desc0))
   DataDescriptor {..} <- C.runConduitRes $
     if recompression
@@ -574,7 +585,8 @@ getCDHeader = do
   fileNameSize   <- getWord16le -- file name length
   extraFieldSize <- getWord16le -- extra field length
   commentSize    <- getWord16le -- file comment size
-  skip 8 -- disk number start, internal/external file attributes
+  skip 4 -- disk number start, internal file attributes
+  externalFileAttrs <- getWord32le -- external file attributes
   offset         <- fromIntegral <$> getWord32le -- offset of local header
   fileName       <- decodeText needUnicode <$>
     getBytes (fromIntegral fileNameSize) -- file name
@@ -603,7 +615,8 @@ getCDHeader = do
             , edUncompressedSize = z64efUncompressedSize z64ef
             , edOffset           = z64efOffset           z64ef
             , edComment = if commentSize == 0 then Nothing else comment
-            , edExtraField       = extraField }
+            , edExtraField       = extraField
+            , edExternalFileAttrs = externalFileAttrs }
       in return $ (,desc) <$> (fileName >>= mkEntrySelector . T.unpack)
 
 -- | Parse an extra-field.
@@ -710,7 +723,7 @@ putHeader c' s EntryDescription {..} = do
     putWord16le (fromIntegral $ B.length comment) -- file comment length
     putWord16le 0 -- disk number start
     putWord16le 0 -- internal file attributes
-    putWord32le 0 -- external file attributes
+    putWord32le edExternalFileAttrs -- external file attributes
     putWord32le (withSaturation edOffset) -- relative offset of local header
   putByteString rawName -- file name (variable size)
   putByteString extraField -- extra field (variable size)
@@ -916,6 +929,7 @@ targetEntry (DeleteEntryComment s) = Just s
 targetEntry (SetModTime       _ s) = Just s
 targetEntry (AddExtraField  _ _ s) = Just s
 targetEntry (DeleteExtraField _ s) = Just s
+targetEntry (SetExternalFileAttributes _ s) = Just s
 targetEntry (SetArchiveComment  _) = Nothing
 targetEntry DeleteArchiveComment   = Nothing
 
