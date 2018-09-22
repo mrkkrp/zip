@@ -129,7 +129,7 @@ getEntryName =
 -- | The exception represents various troubles you can have with
 -- 'EntrySelector'.
 
-data EntrySelectorException
+newtype EntrySelectorException
   = InvalidEntrySelector FilePath
     -- ^ 'EntrySelector' cannot be created from this path
   deriving (Eq, Ord, Typeable)

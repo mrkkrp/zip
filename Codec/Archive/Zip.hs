@@ -71,6 +71,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module Codec.Archive.Zip
@@ -190,7 +191,7 @@ instance MonadBase IO ZipArchive where
 instance MonadBaseControl IO ZipArchive where
   type StM ZipArchive a = (a, ZipState)
   liftBaseWith f = ZipArchive . StateT $ \s ->
-    (\x -> (x, s)) <$> f (flip runStateT s . unZipArchive)
+    (, s) <$> f (flip runStateT s . unZipArchive)
   {-# INLINEABLE liftBaseWith #-}
   restoreM       = ZipArchive . StateT . const . return
   {-# INLINEABLE restoreM #-}
