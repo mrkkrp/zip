@@ -53,7 +53,7 @@ library
                       -Wincomplete-uni-patterns
                       -Wnoncanonical-monad-instances
                       -Wnoncanonical-monadfail-instances
-                      -DHASKELL_ZIP_DEV_MODE
+    cpp-options:      -DHASKELL_ZIP_DEV_MODE
   else
     ghc-options:      -O2 -Wall
   default-language:   Haskell2010
