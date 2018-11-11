@@ -22,11 +22,11 @@
 * [License](#license)
 
 This is a feature-rich, memory-efficient, and type-safe library to
-manipulate Zip archives in Haskell. The library is the most complete and
-efficient implementation of .ZIP specification in pure Haskell (at least
-from open-sourced ones). In particular, it's created with large multimedia
-data in mind and provides all features users might expect, comparable in
-terms of feature-set with libraries like `libzip` in C.
+manipulate Zip archives. The library is the most complete and efficient
+implementation of .ZIP specification in Haskell (at least from open-sourced
+ones). In particular, it's created with large multimedia data in mind and
+provides all features users might expect, comparable in terms of feature-set
+with libraries like `libzip` in C.
 
 ## Why this library is written
 
@@ -43,21 +43,19 @@ this package.
 simple to use. However it creates Zip archives purely, as `ByteStrings`s in
 memory that you can then write to the file system. This is not acceptable if
 you work with more-or-less big data. For example, if you have collection of
-files with total size of 500 MB and you want to pack them into an archive,
-you can easily consume up to 1 GB of memory (the files plus resulting
-archive). Not always you can afford to do this or do this at scale. Even if
-you want just to look at list of archive entries it will read it into memory
-in all its entirety. For my use-case it's not acceptable.
+files with total size of 500 MB and you want to pack them into archive, you
+can easily consume up to 1 GB of memory (the files plus resulting archive).
+Not always you can afford to do this or do this at scale. Even if you want
+just to look at list of archive entries it will read it into memory in all
+its entirety.
 
 ### LibZip
 
-This is a binding to C
-library [`libzip`](https://en.wikipedia.org/wiki/Libzip). There is always a
-certain kind of trouble when you are using bindings. For example, you need
-to take care that target library is installed and its version is compatible
-with the version of your binding. Yes, this means additional headaches. It
-should be just “plug and play”, but now you need to watch out for
-compatibility.
+This is a binding to C library [`libzip`][libzip]. There is always a certain
+kind of trouble with bindings. For example, you need to take care that
+target library is installed and its version is compatible with the version
+of your binding. Yes, this means additional headaches. It should be just
+“plug and play”, but now you need to watch out for compatibility.
 
 It's not that bad with libraries that do not break their API for years, but
 it's not the case with `libzip`. As the maintainer of `LibZip` puts it:
@@ -72,10 +70,10 @@ libraries on Ubuntu are always ancient. This means that I cannot use the
 version of the library from Stackage, and I don't yet know what will be on
 the server.
 
-After much frustration with all these things I decided to avoid using of
+After much frustration with all these things I decided to avoid using
 `LibZip`, because after all, this is not that sort of a project that
-shouldn't be done in pure Haskell. By rewriting this in Haskell, I also can
-make it safer to use.
+shouldn't be done completely in Haskell. By rewriting this in Haskell, I
+also can make it safer to use.
 
 ### zip-conduit
 
@@ -84,22 +82,22 @@ This one uses the right approach: leverage a good streaming library
 feature-rich and has certain problems (including programming style, it uses
 `error` if an entry is missing in archive, among other things), some of them
 are reported on its issue tracker. It also does not appear to be maintained
-(the last sign of activity was on December 23, 2014).
+(last sign of activity was on December 23, 2014).
 
 ## Features
 
 The library supports all features specified in the modern .ZIP specification
 except for encryption and multi-disk archives. See more about this below.
 
-For reference, here is a [copy of the specification](https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT).
+For reference, here is a [copy of the specification][specification].
 
 ### Compression methods
 
 `zip` supports the following compression methods:
 
 * Store (no compression, just store files “as is”)
-* [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)
-* [Bzip2](https://en.wikipedia.org/wiki/Bzip2)
+* [DEFLATE](deflate)
+* [Bzip2](bzip2)
 
 The best way to add a new compression method to the library is to write a
 conduit that will do the compression and publish it as a library. `zip` can
@@ -134,7 +132,8 @@ When necessary, the `ZIP64` extension is automatically used. It's necessary
 when anything from this list takes place:
 
 * Total size of archive is greater than 4 GB.
-* Size of compressed/uncompressed file in archive is greater than 4 GB.
+* Size of a single compressed/uncompressed file in archive is greater than 4
+  GB.
 * There are more than 65535 entries in archive.
 
 The library is particularly suited for processing of large files. For
@@ -280,3 +279,8 @@ Pull requests are also welcome and will be reviewed quickly.
 Copyright © 2016–2018 Mark Karpov
 
 Distributed under BSD 3 clause license.
+
+[libzip]: https://en.wikipedia.org/wiki/Libzip
+[specification]: https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT
+[deflate]: https://en.wikipedia.org/wiki/DEFLATE
+[bzip2]: https://en.wikipedia.org/wiki/Bzip2
