@@ -28,7 +28,7 @@ install:
 
 script:
   - cabal new-build --enable-tests --enable-benchmarks --flags=dev
-  - travis_wait 20 cabal new-test
+  - travis_wait 20 cabal new-test --enable-tests --enable-benchmarks --flags=dev
   - cabal new-haddock
   - cabal sdist
 
