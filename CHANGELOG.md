@@ -1,3 +1,7 @@
+## Unreleased
+
+* Dropped support for GHC 8.0.
+
 ## Zip 1.2.0
 
 * Added the `setExternalFileAttrs` function and the `edExternalFileAttrs`
