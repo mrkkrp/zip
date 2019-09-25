@@ -37,8 +37,8 @@ import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified System.FilePath         as FP
 
-#if !MIN_VERSION_base(4,11,0)
-import Data.Monoid
+#if !MIN_VERSION_base(4,13,0)
+import Data.Semigroup ((<>))
 #endif
 
 -- | Zip tests. Please note that Zip64 feature is not currently tested

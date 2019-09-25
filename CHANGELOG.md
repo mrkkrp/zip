@@ -1,6 +1,6 @@
 ## Unreleased
 
-* Dropped support for GHC 8.0.
+* Dropped support for GHC 8.2 and older.
 
 ## Zip 1.2.0
 
