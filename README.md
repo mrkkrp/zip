@@ -269,10 +269,10 @@ missing something.
 
 ## Contribution
 
-You can contact the maintainer via
-[the issue tracker](https://github.com/mrkkrp/zip/issues).
+You can contact the maintainer via [the issue
+tracker](https://github.com/mrkkrp/zip/issues).
 
-Pull requests are also welcome and will be reviewed quickly.
+Pull requests are also welcome.
 
 ## License
 
