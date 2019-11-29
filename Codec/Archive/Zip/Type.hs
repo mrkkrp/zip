@@ -9,6 +9,7 @@
 --
 -- Types used by the package.
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Codec.Archive.Zip.Type
@@ -192,6 +193,11 @@ data ZipException
     -- ^ Thrown when you try to get contents of non-existing entry
   | ParsingFailed FilePath String
     -- ^ Thrown when archive structure cannot be parsed
+#ifndef ENABLE_BZIP2
+  | BZip2Unsupported
+    -- ^ Thrown when attempting to decompress a 'BZip2' entry and the
+    -- library is compiled without support for it.
+#endif
   deriving (Eq, Ord, Typeable)
 
 instance Show ZipException where
@@ -199,5 +205,10 @@ instance Show ZipException where
     "No such entry found: " ++ show s ++ " in " ++ show file
   show (ParsingFailed file msg) =
     "Parsing of archive structure failed: \n" ++ msg ++ "\nin " ++ show file
+#ifndef ENABLE_BZIP2
+  show BZip2Unsupported =
+    "Encountered a zipfile entry with BZip2 compression, but " ++
+    "the zip library has been built with bzip2 disabled."
+#endif
 
 instance Exception ZipException

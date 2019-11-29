@@ -2,6 +2,9 @@
 
 * Dropped support for GHC 8.2 and older.
 
+* Added a Cabal flag `-fdisable-bzip2` to remove the bzip2 C library
+  dependency and hence support for BZip2 entries.
+
 ## Zip 1.2.0
 
 * Added the `setExternalFileAttrs` function and the `edExternalFileAttrs`

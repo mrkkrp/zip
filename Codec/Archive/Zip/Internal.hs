@@ -55,7 +55,9 @@ import System.FilePath
 import System.IO
 import qualified Data.ByteString     as B
 import qualified Data.Conduit        as C
+#ifdef ENABLE_BZIP2
 import qualified Data.Conduit.BZlib  as BZ
+#endif
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List   as CL
 import qualified Data.Conduit.Zlib   as Z
@@ -499,8 +501,12 @@ sinkData h compression = do
         dataSink
       Deflate -> withCompression $
         Z.compress 9 (Z.WindowBits (-15)) .| dataSink
+#ifdef ENABLE_BZIP2
       BZip2   -> withCompression $
         BZ.bzip2 .| dataSink
+#else
+      BZip2   -> throwM BZip2Unsupported
+#endif
   return DataDescriptor
     { ddCRC32            = fromIntegral crc32
     , ddCompressedSize   = compressedSize
@@ -1014,7 +1020,11 @@ decompressingPipe
   -> ConduitT ByteString ByteString m ()
 decompressingPipe Store   = C.awaitForever C.yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
+#ifdef ENABLE_BZIP2
 decompressingPipe BZip2   = BZ.bunzip2
+#else
+decompressingPipe BZip2   = throwM BZip2Unsupported
+#endif
 
 -- | Sink that calculates CRC32 check sum for incoming stream.
 
