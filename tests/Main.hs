@@ -88,7 +88,13 @@ instance Arbitrary ByteString where
   arbitrary = B.pack <$> listOf arbitrary
 
 instance Arbitrary CompressionMethod where
-  arbitrary = elements [Store, Deflate, BZip2]
+  arbitrary = elements
+    [ Store
+    , Deflate
+#ifdef ENABLE_BZIP2
+    , BZip2
+#endif
+    ]
 
 instance Arbitrary UTCTime where
   arbitrary = UTCTime
