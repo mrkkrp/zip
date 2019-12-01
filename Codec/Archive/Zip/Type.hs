@@ -197,6 +197,8 @@ data ZipException
   | BZip2Unsupported
     -- ^ Thrown when attempting to decompress a 'BZip2' entry and the
     -- library is compiled without support for it.
+    --
+    -- @since 1.3.0
 #endif
   deriving (Eq, Ord, Typeable)
 
