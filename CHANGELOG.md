@@ -1,3 +1,7 @@
+## Zip 1.3.1
+
+* The test suite is now faster.
+
 ## Zip 1.3.0
 
 * Dropped support for GHC 8.2 and older.
