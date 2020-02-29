@@ -159,7 +159,7 @@ data EC = EC (Map EntrySelector EntryDescription) (ZipArchive ()) deriving Show
 instance Arbitrary EC where
   arbitrary = do
     let f (EM s d z) = (s, (d, z))
-    m <- M.fromList . fmap f <$> listOf arbitrary
+    m <- M.fromList . fmap f <$> downScale (listOf arbitrary)
     return (EC (M.map fst m) (sequence_ $ snd <$> M.elems m))
 
 charGen :: Gen Char
@@ -662,18 +662,19 @@ consistencySpec =
 packDirRecurSpec :: SpecWith FilePath
 packDirRecurSpec =
   it "packs arbitrary directory recursively" $
-    \path -> property $ \contents ->
-      withSystemTempDirectory "zip-sandbox" $ \dir -> do
-        forM_ contents $ \s -> do
-          let item = dir </> unEntrySelector s
-          createDirectoryIfMissing True (FP.takeDirectory item)
-          B.writeFile item "foo"
-        selectors <-
-          createArchive path $ do
-            packDirRecur Store mkEntrySelector dir
-            commit
-            M.keysSet <$> getEntries
-        selectors `shouldBe` E.fromList contents
+    \path -> property $
+      forAll (downScale arbitrary) $ \contents ->
+        withSystemTempDirectory "zip-sandbox" $ \dir -> do
+          forM_ contents $ \s -> do
+            let item = dir </> unEntrySelector s
+            createDirectoryIfMissing True (FP.takeDirectory item)
+            B.writeFile item "foo"
+          selectors <-
+            createArchive path $ do
+              packDirRecur Store mkEntrySelector dir
+              commit
+              M.keysSet <$> getEntries
+          selectors `shouldBe` E.fromList contents
 
 unpackIntoSpec :: SpecWith FilePath
 unpackIntoSpec =
@@ -691,6 +692,11 @@ unpackIntoSpec =
 
 ----------------------------------------------------------------------------
 -- Helpers
+
+-- | Change the size parameter of generator by dividing it by 2.
+
+downScale :: Gen a -> Gen a
+downScale = scale (`div` 2)
 
 -- | Check whether given exception is 'EntrySelectorException' with specific
 -- path inside.
