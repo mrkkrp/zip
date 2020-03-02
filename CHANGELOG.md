@@ -1,3 +1,8 @@
+## Zip 1.3.2
+
+* Fix a bug where removing a temporary file failed in the prescence of
+  async exceptions.
+
 ## Zip 1.3.1
 
 * The test suite is now faster.

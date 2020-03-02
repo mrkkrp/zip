@@ -27,7 +27,7 @@ import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
 import Conduit (PrimMonad)
 import Control.Applicative (many, (<|>))
-import Control.Exception (bracketOnError)
+import Control.Exception (bracketOnError, catchJust)
 import Control.Monad
 import Control.Monad.Catch (MonadThrow (..))
 import Control.Monad.Trans.Maybe
@@ -53,6 +53,7 @@ import Numeric.Natural (Natural)
 import System.Directory
 import System.FilePath
 import System.IO
+import System.IO.Error (isDoesNotExistError)
 import qualified Data.ByteString     as B
 import qualified Data.Conduit        as C
 #ifdef ENABLE_BZIP2
@@ -285,7 +286,10 @@ withNewFile fpath action =
     allocate = openBinaryTempFile (takeDirectory fpath) ".zip"
     release (path, h) = do
       hClose h
-      removeFile path
+      -- Despite using `bracketOnError` the file is not guaranteed to exist here
+      -- since we could be interrupted with an async exception after the file has
+      -- been renamed. Therefore, we silentely ignore `DoesNotExistError`.
+      catchJust (guard . isDoesNotExistError) (removeFile path) (const $ pure ())
 
 -- | Determine what comment in new archive will look like given its original
 -- value and a collection of pending actions.
