@@ -49,6 +49,7 @@ library
     build-depends:    bzlib-conduit    >= 0.3     && < 0.4
   exposed-modules:    Codec.Archive.Zip
                     , Codec.Archive.Zip.CP437
+                    , Codec.Archive.Zip.Unix
   other-modules:      Codec.Archive.Zip.Internal
                     , Codec.Archive.Zip.Type
   if flag(dev)

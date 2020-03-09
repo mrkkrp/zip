@@ -8,9 +8,10 @@ module Main (main) where
 
 import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
+import Codec.Archive.Zip.Unix
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Bits (complement)
+import Data.Bits
 import Data.ByteString (ByteString)
 import Data.List (intercalate)
 import Data.Map (Map, (!))
@@ -18,13 +19,14 @@ import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Data.Time
 import Data.Version
+import Data.Word
 import System.Directory
 import System.FilePath ((</>))
 import System.IO
 import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp
 import Test.Hspec
-import Test.QuickCheck
+import Test.QuickCheck hiding ((.&.))
 import qualified Data.ByteString         as B
 import qualified Data.ByteString.Builder as LB
 import qualified Data.ByteString.Lazy    as LB
@@ -52,6 +54,7 @@ main = hspec $ do
   describe "unEntrySelector" unEntrySelectorSpec
   describe "getEntryName"    getEntryNameSpec
   describe "decodeCP437"     decodeCP437Spec
+  describe "fromFileMode"    fromFileModeSpec
   around withSandbox $ do
     describe "createArchive"      createArchiveSpec
     describe "withArchive"        withArchiveSpec
@@ -249,6 +252,15 @@ decodeCP437Spec = do
       c [0xa0..0xbf] "áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐"
       c [0xc0..0xdf] "└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"
       c [0xe0..0xff] "αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
+
+fromFileModeSpec :: Spec
+fromFileModeSpec =
+  context "UNIX helpers" $ do
+    it "toFileMode . fromFileMode == id .&. 0x0fffff" . property $ \mode ->
+      (toFileMode . fromFileMode) (fromIntegral mode)
+        == fromIntegral (mode .&. (0x0fff :: Word16))
+    it "toFileMode == toFileMode . fromFileMode . toFileMode" . property $ \mode ->
+      toFileMode mode == (toFileMode.fromFileMode.toFileMode) mode
 
 ----------------------------------------------------------------------------
 -- Primitive editing/querying actions
