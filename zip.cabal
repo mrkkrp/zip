@@ -63,6 +63,11 @@ library
     cpp-options:      -DENABLE_BZIP2
   default-language:   Haskell2010
 
+  if os(windows)
+    cpp-options:      -DZIP_OS=0
+  else
+    cpp-options:      -DZIP_OS=3
+
 test-suite tests
   main-is:            Main.hs
   hs-source-dirs:     tests

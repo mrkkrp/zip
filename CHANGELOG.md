@@ -1,3 +1,10 @@
+## Zip 1.4.0
+
+* The “version made by” info inside archive now correctly sets Unix as the
+  OS that produced the archive when the library is compiled on Unix. This
+  allows other utilities such as `unzip` to read and correctly restore file
+  permissions. [Issue 62](https://github.com/mrkkrp/zip/issues/62).
+
 ## Zip 1.3.2
 
 * Fix a bug where removing a temporary file failed in the prescence of
