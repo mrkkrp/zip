@@ -532,7 +532,10 @@ deleteExtraField
   -> ZipArchive ()
 deleteExtraField n s = addPending (I.DeleteExtraField n s)
 
--- | Set external file attributes.
+-- | Set external file attributes. This function can be used to set file
+-- permissions.
+--
+-- See also: "Codec.Archive.Zip.Unix".
 --
 -- @since 1.2.0
 

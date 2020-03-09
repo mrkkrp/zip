@@ -5,6 +5,8 @@
   allows other utilities such as `unzip` to read and correctly restore file
   permissions. [Issue 62](https://github.com/mrkkrp/zip/issues/62).
 
+* Added the `Codec.Archive.Zip.Unix` module.
+
 ## Zip 1.3.2
 
 * Fix a bug where removing a temporary file failed in the prescence of
