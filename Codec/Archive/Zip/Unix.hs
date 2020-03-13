@@ -28,7 +28,7 @@ import System.Posix.Types (CMode (..))
 -- @since 1.4.0
 
 toFileMode :: Word32 -> CMode
-toFileMode w = CMode $ (w `shiftR` 16) .&. 0x0fff
+toFileMode attrs = fromIntegral $ (attrs `shiftR` 16) .&. 0x0fff
 
 -- | Convert external attributes to the file info. The function assumes a
 -- regular file and keeps DOS attributes untouched.
@@ -39,4 +39,4 @@ toFileMode w = CMode $ (w `shiftR` 16) .&. 0x0fff
 -- @since 1.4.0
 
 fromFileMode :: CMode -> Word32
-fromFileMode (CMode c) = (0o100000 .|. c) `shiftL` 16
+fromFileMode cmode = (0o100000 .|. fromIntegral cmode) `shiftL` 16
