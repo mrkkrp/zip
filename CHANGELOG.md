@@ -1,3 +1,7 @@
+## Zip 1.4.1
+
+* Fixed the build on Mac.
+
 ## Zip 1.4.0
 
 * The “version made by” info inside archive now correctly sets Unix as the
