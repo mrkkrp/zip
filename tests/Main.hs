@@ -78,7 +78,7 @@ main = hspec $ do
     describe "undoArchiveChanges" undoArchiveChangesSpec
     describe "undoAll"            undoAllSpec
     describe "consistency"        consistencySpec
-    describe "packDirRecur"       packDirRecurSpec
+    describe "packDirRecur'"      packDirRecur'Spec
     describe "unpackInto"         unpackIntoSpec
 
 ----------------------------------------------------------------------------
@@ -671,8 +671,8 @@ consistencySpec =
       txt' `shouldBe` Just txt
       m' `shouldSatisfy` softEqMap m
 
-packDirRecurSpec :: SpecWith FilePath
-packDirRecurSpec =
+packDirRecur'Spec :: SpecWith FilePath
+packDirRecur'Spec =
   it "packs arbitrary directory recursively" $
     \path -> property $
       forAll (downScale arbitrary) $ \contents ->
@@ -681,12 +681,19 @@ packDirRecurSpec =
             let item = dir </> unEntrySelector s
             createDirectoryIfMissing True (FP.takeDirectory item)
             B.writeFile item "foo"
-          selectors <-
+          let magicFileAttrs = 123456789
+          entries <-
             createArchive path $ do
-              packDirRecur Store mkEntrySelector dir
+              packDirRecur'
+                Store
+                mkEntrySelector
+                (setExternalFileAttrs magicFileAttrs)
+                dir
               commit
-              M.keysSet <$> getEntries
-          selectors `shouldBe` E.fromList contents
+              getEntries
+          M.keysSet entries `shouldBe` E.fromList contents
+          forM_ (M.elems entries) $ \desc ->
+            edExternalFileAttrs desc `shouldBe` magicFileAttrs
 
 unpackIntoSpec :: SpecWith FilePath
 unpackIntoSpec =
