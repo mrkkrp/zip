@@ -113,6 +113,7 @@ module Codec.Archive.Zip
   , loadEntry
   , copyEntry
   , packDirRecur
+  , packDirRecur'
     -- ** Modifying entries
   , renameEntry
   , deleteEntry
@@ -458,11 +459,28 @@ packDirRecur
      -- directory we pack
   -> FilePath          -- ^ Path to directory to add
   -> ZipArchive ()
-packDirRecur t f path = do
+packDirRecur t f = packDirRecur' t f (const $ return ())
+
+-- | The same as 'packDirRecur' but allows us to perform modifying actions
+-- on the created entities as we go.
+--
+-- @since 1.5.0
+
+packDirRecur'
+  :: CompressionMethod -- ^ Compression method to use
+  -> (FilePath -> ZipArchive EntrySelector)
+     -- ^ How to get 'EntrySelector' from a path relative to the root of the
+     -- directory we pack
+  -> (EntrySelector -> ZipArchive ())
+     -- ^ How to modify an entry after creation
+  -> FilePath -- ^ Path to directory to add
+  -> ZipArchive ()
+packDirRecur' t f patch path = do
   files <- liftIO (listDirRecur path)
   forM_ files $ \x -> do
     s <- f x
     loadEntry t s (path </> x)
+    patch s
 
 -- | Rename an entry in the archive. If the entry does not exist, nothing
 -- will happen.

@@ -1,3 +1,7 @@
+## Zip 1.5.0
+
+* Added the `packDirRecur'` function.
+
 ## Zip 1.4.1
 
 * Fixed the build on Mac.
