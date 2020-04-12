@@ -2,6 +2,8 @@
 
 * Added the `packDirRecur'` function.
 
+* Dropped support for GHC 8.4.
+
 ## Zip 1.4.1
 
 * Fixed the build on Mac.
