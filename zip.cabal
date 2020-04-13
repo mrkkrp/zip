@@ -26,7 +26,7 @@ flag disable-bzip2
   manual:              True
 
 library
-  build-depends:      base             >= 4.11    && < 5.0
+  build-depends:      base             >= 4.12    && < 5.0
                     , bytestring       >= 0.9     && < 0.11
                     , case-insensitive >= 1.2.0.2 && < 1.3
                     , cereal           >= 0.3     && < 0.6
@@ -73,7 +73,7 @@ test-suite tests
   main-is:            Main.hs
   hs-source-dirs:     tests
   type:               exitcode-stdio-1.0
-  build-depends:      base             >= 4.11    && < 5.0
+  build-depends:      base             >= 4.12    && < 5.0
                     , QuickCheck       >= 2.4     && < 3.0
                     , bytestring       >= 0.9     && < 0.11
                     , conduit          >= 1.3     && < 1.4
@@ -103,7 +103,7 @@ source-repository head
 executable haskell-zip-app
   main-is:            Main.hs
   hs-source-dirs:     bench-app
-  build-depends:      base             >= 4.11 && < 5.0
+  build-depends:      base             >= 4.12 && < 5.0
                     , filepath         >= 1.2 && < 1.5
                     , zip
   if flag(dev)
