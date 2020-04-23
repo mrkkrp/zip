@@ -8,29 +8,28 @@
 -- Portability :  portable
 --
 -- Support for decoding of CP 437 text.
-
 module Codec.Archive.Zip.CP437
-  ( decodeCP437 )
+  ( decodeCP437,
+  )
 where
 
 import Control.Arrow (first)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import Data.Char
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Word (Word8)
-import qualified Data.ByteString as B
-import qualified Data.Text       as T
 
 -- | Decode a 'ByteString' containing CP 437 encoded text.
-
 decodeCP437 :: ByteString -> Text
-decodeCP437 bs = T.unfoldrN
-  (B.length bs)
-  (fmap (first decodeByteCP437) . B.uncons)
-  bs
+decodeCP437 bs =
+  T.unfoldrN
+    (B.length bs)
+    (fmap (first decodeByteCP437) . B.uncons)
+    bs
 
 -- | Decode a single byte of CP437 encoded text.
-
 decodeByteCP437 :: Word8 -> Char
 decodeByteCP437 byte = chr $ case byte of
   128 -> 199
@@ -161,4 +160,4 @@ decodeByteCP437 byte = chr $ case byte of
   253 -> 178
   254 -> 9632
   255 -> 160
-  x   -> fromIntegral x -- the rest of characters translate directly
+  x -> fromIntegral x -- the rest of characters translate directly

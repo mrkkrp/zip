@@ -1,10 +1,13 @@
-{-# LANGUAGE CPP               #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS -fno-warn-orphans  #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Main (main) where
+module Main
+  ( main,
+  )
+where
 
 import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
@@ -13,31 +16,31 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Bits
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Builder as LB
+import qualified Data.ByteString.Lazy as LB
+import qualified Data.Conduit as C
+import qualified Data.Conduit.List as CL
+import qualified Data.DList as DList
 import Data.List (intercalate)
-import Data.Map (Map, (!))
+import Data.Map ((!), Map)
+import qualified Data.Map.Strict as M
 import Data.Maybe (fromJust)
+import qualified Data.Set as E
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Time
 import Data.Version
 import Data.Word
 import System.Directory
 import System.FilePath ((</>))
+import qualified System.FilePath as FP
 import System.IO
 import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
-import qualified Data.ByteString         as B
-import qualified Data.ByteString.Builder as LB
-import qualified Data.ByteString.Lazy    as LB
-import qualified Data.Conduit            as C
-import qualified Data.Conduit.List       as CL
-import qualified Data.DList              as DList
-import qualified Data.Map.Strict         as M
-import qualified Data.Set                as E
-import qualified Data.Text               as T
-import qualified Data.Text.Encoding      as T
-import qualified System.FilePath         as FP
 
 #if !MIN_VERSION_base(4,13,0)
 import Data.Semigroup ((<>))
@@ -47,39 +50,38 @@ import Data.Semigroup ((<>))
 -- automatically because for it to expose itself we need > 4GB of
 -- data. Handling such quantities of data locally is problematic and even
 -- more problematic in the context of CI server.
-
 main :: IO ()
 main = hspec $ do
   describe "mkEntrySelector" mkEntrySelectorSpec
   describe "unEntrySelector" unEntrySelectorSpec
-  describe "getEntryName"    getEntryNameSpec
-  describe "decodeCP437"     decodeCP437Spec
-  describe "fromFileMode"    fromFileModeSpec
+  describe "getEntryName" getEntryNameSpec
+  describe "decodeCP437" decodeCP437Spec
+  describe "fromFileMode" fromFileModeSpec
   around withSandbox $ do
-    describe "createArchive"      createArchiveSpec
-    describe "withArchive"        withArchiveSpec
-    describe "archive comment"    archiveCommentSpec
-    describe "getEntryDesc"       getEntryDescSpec
-    describe "version needed"     versionNeededSpec
-    describe "addEntry"           addEntrySpec
-    describe "sinkEntry"          sinkEntrySpec
-    describe "loadEntry"          loadEntrySpec
-    describe "copyEntry"          copyEntrySpec
-    describe "checkEntry"         checkEntrySpec
-    describe "recompress"         recompressSpec
-    describe "entry comment"      entryCommentSpec
-    describe "setModTime"         setModTimeSpec
-    describe "extra field"        extraFieldSpec
+    describe "createArchive" createArchiveSpec
+    describe "withArchive" withArchiveSpec
+    describe "archive comment" archiveCommentSpec
+    describe "getEntryDesc" getEntryDescSpec
+    describe "version needed" versionNeededSpec
+    describe "addEntry" addEntrySpec
+    describe "sinkEntry" sinkEntrySpec
+    describe "loadEntry" loadEntrySpec
+    describe "copyEntry" copyEntrySpec
+    describe "checkEntry" checkEntrySpec
+    describe "recompress" recompressSpec
+    describe "entry comment" entryCommentSpec
+    describe "setModTime" setModTimeSpec
+    describe "extra field" extraFieldSpec
     describe "setExternalFileAttrsSpec" setExternalFileAttrsSpec
-    describe "renameEntry"        renameEntrySpec
-    describe "deleteEntry"        deleteEntrySpec
-    describe "forEntries"         forEntriesSpec
-    describe "undoEntryChanges"   undoEntryChangesSpec
+    describe "renameEntry" renameEntrySpec
+    describe "deleteEntry" deleteEntrySpec
+    describe "forEntries" forEntriesSpec
+    describe "undoEntryChanges" undoEntryChangesSpec
     describe "undoArchiveChanges" undoArchiveChangesSpec
-    describe "undoAll"            undoAllSpec
-    describe "consistency"        consistencySpec
-    describe "packDirRecur'"      packDirRecur'Spec
-    describe "unpackInto"         unpackIntoSpec
+    describe "undoAll" undoAllSpec
+    describe "consistency" consistencySpec
+    describe "packDirRecur'" packDirRecur'Spec
+    describe "unpackInto" unpackIntoSpec
 
 ----------------------------------------------------------------------------
 -- Arbitrary instances and generators
@@ -91,18 +93,20 @@ instance Arbitrary ByteString where
   arbitrary = B.pack <$> listOf arbitrary
 
 instance Arbitrary CompressionMethod where
-  arbitrary = elements
-    [ Store
-    , Deflate
+  arbitrary =
+    elements
+      [ Store,
 #ifdef ENABLE_BZIP2
-    , BZip2
+        BZip2,
 #endif
-    ]
+        Deflate
+      ]
 
 instance Arbitrary UTCTime where
-  arbitrary = UTCTime
-    <$> (ModifiedJulianDay <$> choose (44239, 90989))
-    <*> (secondsToDiffTime <$> choose (0, 86399))
+  arbitrary =
+    UTCTime
+      <$> (ModifiedJulianDay <$> choose (44239, 90989))
+      <*> (secondsToDiffTime <$> choose (0, 86399))
 
 newtype RelPath = RelPath FilePath
 
@@ -111,26 +115,29 @@ instance Show RelPath where
 
 instance Arbitrary RelPath where
   arbitrary = do
-    p <- intercalate "/" <$> listOf1
-      ((++) <$> vectorOf 3 charGen
-            <*> listOf1 charGen)
+    p <-
+      intercalate "/"
+        <$> listOf1
+          ( (++) <$> vectorOf 3 charGen
+              <*> listOf1 charGen
+          )
     case mkEntrySelector p of
       Nothing -> arbitrary
-      Just  _ -> return (RelPath p)
+      Just _ -> return (RelPath p)
 
 instance Arbitrary EntrySelector where
   arbitrary = do
     RelPath x <- arbitrary
     case mkEntrySelector x of
       Nothing -> arbitrary
-      Just s  -> return s
+      Just s -> return s
 
-data EM = EM EntrySelector EntryDescription (ZipArchive ()) deriving Show
+data EM = EM EntrySelector EntryDescription (ZipArchive ()) deriving (Show)
 
 instance Arbitrary EM where
   arbitrary = do
-    s       <- arbitrary
-    method  <- arbitrary
+    s <- arbitrary
+    method <- arbitrary
     content <- arbitrary
     modTime <- arbitrary
     comment <- arbitrary
@@ -143,21 +150,25 @@ instance Arbitrary EM where
           setEntryComment comment s
           addExtraField extraFieldTag extraFieldContent s
           setExternalFileAttrs externalFileAttrs s
-    return $ EM s EntryDescription
-      { edVersionMadeBy    = undefined
-      , edVersionNeeded    = undefined
-      , edCompression      = method
-      , edModTime          = modTime
-      , edCRC32            = undefined
-      , edCompressedSize   = undefined
-      , edUncompressedSize = fromIntegral (B.length content)
-      , edOffset           = undefined
-      , edComment          = Just comment
-      , edExtraField       = M.singleton extraFieldTag extraFieldContent
-      , edExternalFileAttrs = externalFileAttrs }
-      action
+    return $
+      EM
+        s
+        EntryDescription
+          { edVersionMadeBy = undefined,
+            edVersionNeeded = undefined,
+            edCompression = method,
+            edModTime = modTime,
+            edCRC32 = undefined,
+            edCompressedSize = undefined,
+            edUncompressedSize = fromIntegral (B.length content),
+            edOffset = undefined,
+            edComment = Just comment,
+            edExtraField = M.singleton extraFieldTag extraFieldContent,
+            edExternalFileAttrs = externalFileAttrs
+          }
+        action
 
-data EC = EC (Map EntrySelector EntryDescription) (ZipArchive ()) deriving Show
+data EC = EC (Map EntrySelector EntryDescription) (ZipArchive ()) deriving (Show)
 
 instance Arbitrary EC where
   arbitrary = do
@@ -166,26 +177,37 @@ instance Arbitrary EC where
     return (EC (M.map fst m) (sequence_ $ snd <$> M.elems m))
 
 charGen :: Gen Char
-charGen = frequency
-  [ (3, choose ('a', 'z'))
-  , (3, choose ('A', 'Z'))
-  , (3, choose ('0', '9'))
-  , (1, arbitrary `suchThat` (>= ' ')) ]
+charGen =
+  frequency
+    [ (3, choose ('a', 'z')),
+      (3, choose ('A', 'Z')),
+      (3, choose ('0', '9')),
+      (1, arbitrary `suchThat` (>= ' '))
+    ]
 
 binASCII :: Gen ByteString
 binASCII = LB.toStrict . LB.toLazyByteString <$> go
-  where go = frequency
-          [ (10, (<>) <$> (LB.word8 <$> choose (0, 127)) <*> go)
-          , (1,  return mempty) ]
+  where
+    go =
+      frequency
+        [ (10, (<>) <$> (LB.word8 <$> choose (0, 127)) <*> go),
+          (1, return mempty)
+        ]
 
 instance Show EntryDescription where
-  show ed = "{ edCompression = " ++ show (edCompression ed) ++
-    "\n, edModTime = " ++ show (edModTime ed) ++
-    "\n, edUncompressedSize = " ++ show (edUncompressedSize ed) ++
-    "\n, edComment = " ++ show (edComment ed) ++
-    "\n, edExtraField = " ++ show (edExtraField ed) ++
-    "\n, edExtFileAttr = " ++ show (edExternalFileAttrs ed) ++
-    " }"
+  show ed =
+    "{ edCompression = " ++ show (edCompression ed)
+      ++ "\n, edModTime = "
+      ++ show (edModTime ed)
+      ++ "\n, edUncompressedSize = "
+      ++ show (edUncompressedSize ed)
+      ++ "\n, edComment = "
+      ++ show (edComment ed)
+      ++ "\n, edExtraField = "
+      ++ show (edExtraField ed)
+      ++ "\n, edExtFileAttr = "
+      ++ show (edExternalFileAttrs ed)
+      ++ " }"
 
 instance Show (ZipArchive a) where
   show = const "<zip archive>"
@@ -200,58 +222,69 @@ mkEntrySelectorSpec = do
       accepts x = do
         s <- mkEntrySelector x
         getEntryName s `shouldBe` T.pack x
-  context "when absolute paths are passed" $
-    it "they are rejected" $ property $ \(RelPath x) ->
+  context "when absolute paths are passed"
+    $ it "they are rejected"
+    $ property
+    $ \(RelPath x) ->
       rejects ('/' : x)
-  context "when paths with trailing path separator are passed" $
-    it "they are rejected" $ do
+  context "when paths with trailing path separator are passed"
+    $ it "they are rejected"
+    $ do
       rejects "foo/"
       rejects "foo/bar/"
-  context "when paths with dot as path segment are passed" $
-    it "they are rejected" $ do
+  context "when paths with dot as path segment are passed"
+    $ it "they are rejected"
+    $ do
       rejects "./foo/bar"
       rejects "foo/./bar"
       rejects "foo/bar/."
-  context "when paths with double dot as path segment are passed" $
-    it "they are rejected" $ do
+  context "when paths with double dot as path segment are passed"
+    $ it "they are rejected"
+    $ do
       rejects "../foo/bar"
       rejects "foo/../bar"
       rejects "foo/bar/.."
-  context "when too long paths are passed" $
-    it "rejects them" $ do
+  context "when too long paths are passed"
+    $ it "rejects them"
+    $ do
       let path = replicate 0x10000 'a'
       mkEntrySelector path `shouldThrow` isEntrySelectorException path
-  context "when correct paths are passed" $
-    it "adequately represents them" $ do
+  context "when correct paths are passed"
+    $ it "adequately represents them"
+    $ do
       accepts "foo"
       accepts "one/two/three"
       accepts "something.txt"
 
 unEntrySelectorSpec :: Spec
 unEntrySelectorSpec =
-  context "when entry selector exists" $
-    it "has corresponding path" . property $ \s ->
+  context "when entry selector exists"
+    $ it "has corresponding path" . property
+    $ \s ->
       not . null . unEntrySelector $ s
 
 getEntryNameSpec :: Spec
 getEntryNameSpec =
-  context "when entry selector exists" $
-    it "has corresponding representation" . property $ \s ->
+  context "when entry selector exists"
+    $ it "has corresponding representation" . property
+    $ \s ->
       not . T.null . getEntryName $ s
 
 decodeCP437Spec :: Spec
 decodeCP437Spec = do
-  context "when ASCII-compatible subset is used" $
-    it "has the same result as decoding UTF-8" . property $
-      forAll binASCII $ \bin ->
-        decodeCP437 bin `shouldBe` T.decodeUtf8 bin
-  context "when non-ASCII subset is used" $
-    it "is decoded correctly" $ do
-      let c b t = decodeCP437 (B.pack b ) `shouldBe` t
-      c [0x80..0x9f] "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ"
-      c [0xa0..0xbf] "áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐"
-      c [0xc0..0xdf] "└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"
-      c [0xe0..0xff] "αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
+  context "when ASCII-compatible subset is used"
+    $ it "has the same result as decoding UTF-8" . property
+    $ forAll binASCII
+    $ \bin ->
+      decodeCP437 bin `shouldBe` T.decodeUtf8 bin
+  context "when non-ASCII subset is used"
+    $ it "is decoded correctly"
+    $ do
+      let c b t = decodeCP437 (B.pack b) `shouldBe` t
+      c [0x80 .. 0x9f] "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ"
+      c [0xa0 .. 0xbf] "áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐"
+      c [0xc0 .. 0xdf] "└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"
+      c [0xe0 .. 0xff] "αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
 
 fromFileModeSpec :: Spec
 fromFileModeSpec =
@@ -260,70 +293,81 @@ fromFileModeSpec =
       (toFileMode . fromFileMode) (fromIntegral mode)
         == fromIntegral (mode .&. (0x0fff :: Word16))
     it "toFileMode == toFileMode . fromFileMode . toFileMode" . property $ \mode ->
-      toFileMode mode == (toFileMode.fromFileMode.toFileMode) mode
+      toFileMode mode == (toFileMode . fromFileMode . toFileMode) mode
 
 ----------------------------------------------------------------------------
 -- Primitive editing/querying actions
 
 createArchiveSpec :: SpecWith FilePath
 createArchiveSpec = do
-  context "when called with non-existent path and empty recipe" $
-    it "creates correct representation of empty archive" $ \path -> do
+  context "when called with non-existent path and empty recipe"
+    $ it "creates correct representation of empty archive"
+    $ \path -> do
       createArchive path (return ())
       B.readFile path `shouldReturn` emptyArchive
-  context "when called with an occupied path" $
-    it "overwrites it" $ \path -> do
+  context "when called with an occupied path"
+    $ it "overwrites it"
+    $ \path -> do
       B.writeFile path B.empty
       createArchive path (return ())
       B.readFile path `shouldNotReturn` B.empty
 
 withArchiveSpec :: SpecWith FilePath
 withArchiveSpec = do
-  context "when called with non-existent path" $
-    it "throws 'isDoesNotExistError' exception" $ \path ->
+  context "when called with non-existent path"
+    $ it "throws 'isDoesNotExistError' exception"
+    $ \path ->
       withArchive path (return ()) `shouldThrow` isDoesNotExistError
-  context "when called with occupied path (empty file)" $
-    it "throws 'ParsingFailed' exception" $ \path -> do
+  context "when called with occupied path (empty file)"
+    $ it "throws 'ParsingFailed' exception"
+    $ \path -> do
       B.writeFile path B.empty
-      withArchive path (return ()) `shouldThrow`
-        isParsingFailed path "Cannot locate end of central directory"
-  context "when called with occupied path (empty archive)" $
-    it "does not overwrite the file unnecessarily" $ \path -> do
+      withArchive path (return ())
+        `shouldThrow` isParsingFailed path "Cannot locate end of central directory"
+  context "when called with occupied path (empty archive)"
+    $ it "does not overwrite the file unnecessarily"
+    $ \path -> do
       B.writeFile path emptyArchive
-      withArchive path $
-        liftIO $ B.writeFile path B.empty
+      withArchive path
+        $ liftIO
+        $ B.writeFile path B.empty
       B.readFile path `shouldNotReturn` emptyArchive
 
 archiveCommentSpec :: SpecWith FilePath
 archiveCommentSpec = do
-  context "when new archive is created" $
-    it "returns no archive comment" $ \path ->
+  context "when new archive is created"
+    $ it "returns no archive comment"
+    $ \path ->
       createArchive path getArchiveComment `shouldReturn` Nothing
-  context "when comment contains end of central directory signature" $
-    it "reads it without problems" $ \path -> do
+  context "when comment contains end of central directory signature"
+    $ it "reads it without problems"
+    $ \path -> do
       entries <- createArchive path $ do
         setArchiveComment "I saw you want to have PK\ENQ\ACK here."
         commit
         getEntries
       entries `shouldBe` M.empty
-  context "when comment is committed (delete/set)" $
-    it "reads it and updates" $ \path -> property $ \txt -> do
+  context "when comment is committed (delete/set)"
+    $ it "reads it and updates"
+    $ \path -> property $ \txt -> do
       comment <- createArchive path $ do
         deleteArchiveComment
         setArchiveComment txt
         commit
         getArchiveComment
       comment `shouldBe` Just txt
-  context "when comment is committed (set/delete)" $
-    it "reads it and updates" $ \path -> property $ \txt -> do
+  context "when comment is committed (set/delete)"
+    $ it "reads it and updates"
+    $ \path -> property $ \txt -> do
       comment <- createArchive path $ do
         setArchiveComment txt
         deleteArchiveComment
         commit
         getArchiveComment
       comment `shouldBe` Nothing
-  context "when pre-existing comment is overwritten" $
-    it "returns the new comment" $ \path -> property $ \txt txt' -> do
+  context "when pre-existing comment is overwritten"
+    $ it "returns the new comment"
+    $ \path -> property $ \txt txt' -> do
       comment <- createArchive path $ do
         setArchiveComment txt
         commit
@@ -331,8 +375,9 @@ archiveCommentSpec = do
         commit
         getArchiveComment
       comment `shouldBe` Just txt'
-  context "when pre-existing comment is deleted" $
-    it "actually deletes it" $ \path -> property $ \txt -> do
+  context "when pre-existing comment is deleted"
+    $ it "actually deletes it"
+    $ \path -> property $ \txt -> do
       comment <- createArchive path $ do
         setArchiveComment txt
         commit
@@ -355,16 +400,19 @@ versionNeededSpec =
     -- it should be mentioned that the version also depends on Zip64 feature
     \path -> property $ \(EM s desc z) -> do
       desc' <- fromJust <$> createArchive path (z >> commit >> getEntryDesc s)
-      edVersionNeeded desc' `shouldBe` makeVersion
-        (case edCompression desc of
-          Store   -> [2,0]
-          Deflate -> [2,0]
-          BZip2   -> [4,6])
+      edVersionNeeded desc'
+        `shouldBe` makeVersion
+          ( case edCompression desc of
+              Store -> [2, 0]
+              Deflate -> [2, 0]
+              BZip2 -> [4, 6]
+          )
 
 addEntrySpec :: SpecWith FilePath
 addEntrySpec =
-  context "when an entry is added" $
-    it "is there" $ \path -> property $ \m b s -> do
+  context "when an entry is added"
+    $ it "is there"
+    $ \path -> property $ \m b s -> do
       info <- createArchive path $ do
         addEntry m b s
         commit
@@ -373,8 +421,9 @@ addEntrySpec =
 
 sinkEntrySpec :: SpecWith FilePath
 sinkEntrySpec =
-  context "when an entry is sunk" $
-    it "is there" $ \path -> property $ \m b s -> do
+  context "when an entry is sunk"
+    $ it "is there"
+    $ \path -> property $ \m b s -> do
       info <- createArchive path $ do
         sinkEntry m (C.yield b) s
         commit
@@ -384,8 +433,9 @@ sinkEntrySpec =
 
 loadEntrySpec :: SpecWith FilePath
 loadEntrySpec =
-  context "when an entry is loaded" $
-    it "is there" $ \path -> property $ \m b s t -> do
+  context "when an entry is loaded"
+    $ it "is there"
+    $ \path -> property $ \m b s t -> do
       let vpath = deriveVacant path
       B.writeFile vpath b
       setModificationTime vpath t
@@ -400,8 +450,9 @@ loadEntrySpec =
 
 copyEntrySpec :: SpecWith FilePath
 copyEntrySpec =
-  context "when entry is copied form another archive" $
-    it "is there" $ \path -> property $ \m b s -> do
+  context "when entry is copied form another archive"
+    $ it "is there"
+    $ \path -> property $ \m b s -> do
       let vpath = deriveVacant path
       createArchive vpath (addEntry m b s)
       info <- createArchive path $ do
@@ -412,15 +463,17 @@ copyEntrySpec =
 
 checkEntrySpec :: SpecWith FilePath
 checkEntrySpec = do
-  context "when entry is intact" $
-    it "passes the check" $ \path -> property $ \m b s -> do
+  context "when entry is intact"
+    $ it "passes the check"
+    $ \path -> property $ \m b s -> do
       check <- createArchive path $ do
         addEntry m b s
         commit
         checkEntry s
       check `shouldBe` True
-  context "when entry is corrupted" $
-    it "does not pass the check" $ \path -> property $ \b s ->
+  context "when entry is corrupted"
+    $ it "does not pass the check"
+    $ \path -> property $ \b s ->
       not (B.null b) ==> do
         let r = 50 + (B.length . T.encodeUtf8 . getEntryName $ s)
         offset <- createArchive path $ do
@@ -436,8 +489,9 @@ checkEntrySpec = do
 
 recompressSpec :: SpecWith FilePath
 recompressSpec =
-  context "when recompression is used" $
-    it "gets recompressed" $ \path -> property $ \m m' b s -> do
+  context "when recompression is used"
+    $ it "gets recompressed"
+    $ \path -> property $ \m m' b s -> do
       info <- createArchive path $ do
         addEntry m b s
         commit
@@ -448,8 +502,9 @@ recompressSpec =
 
 entryCommentSpec :: SpecWith FilePath
 entryCommentSpec = do
-  context "when comment is committed (delete/set)" $
-    it "reads it and updates" $ \path -> property $ \txt s -> do
+  context "when comment is committed (delete/set)"
+    $ it "reads it and updates"
+    $ \path -> property $ \txt s -> do
       comment <- createArchive path $ do
         addEntry Store "foo" s
         deleteEntryComment s
@@ -457,8 +512,9 @@ entryCommentSpec = do
         commit
         edComment . (! s) <$> getEntries
       comment `shouldBe` Just txt
-  context "when comment is committed (set/delete)" $
-    it "reads it and updates" $ \path -> property $ \txt s -> do
+  context "when comment is committed (set/delete)"
+    $ it "reads it and updates"
+    $ \path -> property $ \txt s -> do
       comment <- createArchive path $ do
         addEntry Store "foo" s
         setEntryComment txt s
@@ -466,8 +522,9 @@ entryCommentSpec = do
         commit
         edComment . (! s) <$> getEntries
       comment `shouldBe` Nothing
-  context "when pre-existing comment is overwritten" $
-    it "returns the new comment" $ \path -> property $ \txt txt' s -> do
+  context "when pre-existing comment is overwritten"
+    $ it "returns the new comment"
+    $ \path -> property $ \txt txt' s -> do
       comment <- createArchive path $ do
         addEntry Store "foo" s
         setEntryComment txt s
@@ -476,8 +533,9 @@ entryCommentSpec = do
         commit
         edComment . (! s) <$> getEntries
       comment `shouldBe` Just txt'
-  context "when pre-existing comment is deleted" $
-    it "actually deletes it" $ \path -> property $ \txt s -> do
+  context "when pre-existing comment is deleted"
+    $ it "actually deletes it"
+    $ \path -> property $ \txt s -> do
       comment <- createArchive path $ do
         addEntry Store "foo" s
         setEntryComment txt s
@@ -489,16 +547,18 @@ entryCommentSpec = do
 
 setModTimeSpec :: SpecWith FilePath
 setModTimeSpec = do
-  context "when mod time is set (after creation)" $
-    it "reads it and updates" $ \path -> property $ \time s -> do
+  context "when mod time is set (after creation)"
+    $ it "reads it and updates"
+    $ \path -> property $ \time s -> do
       modTime <- createArchive path $ do
         addEntry Store "foo" s
         setModTime time s
         commit
         edModTime . (! s) <$> getEntries
       modTime `shouldSatisfy` isCloseTo time
-  context "when mod time is set (before creation)" $
-    it "has no effect" $ \path -> property $ \time time' s ->
+  context "when mod time is set (before creation)"
+    $ it "has no effect"
+    $ \path -> property $ \time time' s ->
       not (isCloseTo time time') ==> do
         modTime <- createArchive path $ do
           setModTime time s
@@ -509,8 +569,9 @@ setModTimeSpec = do
 
 extraFieldSpec :: SpecWith FilePath
 extraFieldSpec = do
-  context "when extra field is committed (delete/set)" $
-    it "reads it and updates" $ \path -> property $ \n b s ->
+  context "when extra field is committed (delete/set)"
+    $ it "reads it and updates"
+    $ \path -> property $ \n b s ->
       n /= 1 ==> do
         efield <- createArchive path $ do
           addEntry Store "foo" s
@@ -519,8 +580,9 @@ extraFieldSpec = do
           commit
           M.lookup n . edExtraField . (! s) <$> getEntries
         efield `shouldBe` Just b
-  context "when extra field is committed (set/delete)" $
-    it "reads it and updates" $ \path -> property $ \n b s ->
+  context "when extra field is committed (set/delete)"
+    $ it "reads it and updates"
+    $ \path -> property $ \n b s ->
       n /= 1 ==> do
         efield <- createArchive path $ do
           addEntry Store "foo" s
@@ -529,8 +591,9 @@ extraFieldSpec = do
           commit
           M.lookup n . edExtraField . (! s) <$> getEntries
         efield `shouldBe` Nothing
-  context "when pre-existing extra field is overwritten" $
-    it "reads it and updates" $ \path -> property $ \n b b' s ->
+  context "when pre-existing extra field is overwritten"
+    $ it "reads it and updates"
+    $ \path -> property $ \n b b' s ->
       n /= 1 ==> do
         efield <- createArchive path $ do
           addEntry Store "foo" s
@@ -540,8 +603,9 @@ extraFieldSpec = do
           commit
           M.lookup n . edExtraField . (! s) <$> getEntries
         efield `shouldBe` Just b'
-  context "when pre-existing extra field is deleted" $
-    it "actually deletes it" $ \path -> property $ \n b s ->
+  context "when pre-existing extra field is deleted"
+    $ it "actually deletes it"
+    $ \path -> property $ \n b s ->
       n /= 1 ==> do
         efield <- createArchive path $ do
           addEntry Store "foo" s
@@ -554,8 +618,9 @@ extraFieldSpec = do
 
 setExternalFileAttrsSpec :: SpecWith FilePath
 setExternalFileAttrsSpec =
-  context "when an external file attribute is added (after creation)" $
-    it "sets a custom external file attribute" $ \path -> property $ \attr s -> do
+  context "when an external file attribute is added (after creation)"
+    $ it "sets a custom external file attribute"
+    $ \path -> property $ \attr s -> do
       attr' <- createArchive path $ do
         addEntry Store "foo" s
         setExternalFileAttrs attr s
@@ -565,16 +630,18 @@ setExternalFileAttrsSpec =
 
 renameEntrySpec :: SpecWith FilePath
 renameEntrySpec = do
-  context "when renaming after editing of new entry" $
-    it "produces correct result" $ \path -> property $ \(EM s desc z) s' -> do
+  context "when renaming after editing of new entry"
+    $ it "produces correct result"
+    $ \path -> property $ \(EM s desc z) s' -> do
       desc' <- createArchive path $ do
         z
         renameEntry s s'
         commit
         (! s') <$> getEntries
       desc' `shouldSatisfy` softEq desc
-  context "when renaming existing entry" $
-    it "gets renamed" $ \path -> property $ \(EM s desc z) s' -> do
+  context "when renaming existing entry"
+    $ it "gets renamed"
+    $ \path -> property $ \(EM s desc z) s' -> do
       desc' <- createArchive path $ do
         z
         commit
@@ -585,16 +652,18 @@ renameEntrySpec = do
 
 deleteEntrySpec :: SpecWith FilePath
 deleteEntrySpec = do
-  context "when deleting after editing of new entry" $
-    it "produces correct result" $ \path -> property $ \(EM s _ z) -> do
+  context "when deleting after editing of new entry"
+    $ it "produces correct result"
+    $ \path -> property $ \(EM s _ z) -> do
       member <- createArchive path $ do
         z
         deleteEntry s
         commit
         doesEntryExist s
       member `shouldBe` False
-  context "when deleting existing entry" $
-    it "gets deleted" $ \path -> property $ \(EM s _ z) -> do
+  context "when deleting existing entry"
+    $ it "gets deleted"
+    $ \path -> property $ \(EM s _ z) -> do
       member <- createArchive path $ do
         z
         commit
@@ -612,7 +681,7 @@ forEntriesSpec =
       forEntries (setEntryComment txt)
       commit
       getEntries
-    let f ed = ed { edComment = Just txt }
+    let f ed = ed {edComment = Just txt}
     m' `shouldSatisfy` softEqMap (M.map f m)
 
 undoEntryChangesSpec :: SpecWith FilePath
@@ -674,8 +743,9 @@ consistencySpec =
 packDirRecur'Spec :: SpecWith FilePath
 packDirRecur'Spec =
   it "packs arbitrary directory recursively" $
-    \path -> property $
-      forAll (downScale arbitrary) $ \contents ->
+    \path -> property
+      $ forAll (downScale arbitrary)
+      $ \contents ->
         withSystemTempDirectory "zip-sandbox" $ \dir -> do
           forM_ contents $ \s -> do
             let item = dir </> unEntrySelector s
@@ -713,19 +783,16 @@ unpackIntoSpec =
 -- Helpers
 
 -- | Change the size parameter of generator by dividing it by 2.
-
 downScale :: Gen a -> Gen a
 downScale = scale (`div` 2)
 
 -- | Check whether given exception is 'EntrySelectorException' with specific
 -- path inside.
-
 isEntrySelectorException :: FilePath -> EntrySelectorException -> Bool
 isEntrySelectorException path (InvalidEntrySelector p) = p == path
 
 -- | Check whether given exception is 'ParsingFailed' exception with
 -- specific path and error message inside.
-
 isParsingFailed :: FilePath -> String -> ZipException -> Bool
 isParsingFailed path msg (ParsingFailed path' msg') =
   path == path' && msg == msg'
@@ -735,51 +802,67 @@ isParsingFailed _ _ _ = False
 -- tests. Note that we're using new unique sandbox directory for each test
 -- case to avoid contamination and it's unconditionally deleted after test
 -- case finishes. The function returns vacant file path in that directory.
-
 withSandbox :: ActionWith FilePath -> IO ()
 withSandbox action = withSystemTempDirectory "zip-sandbox" $ \dir ->
   action (dir </> "foo.zip")
 
 -- | Given primary name (name of archive), generate a name that does not
 -- collide with it.
-
 deriveVacant :: FilePath -> FilePath
 deriveVacant = (</> "bar") . FP.takeDirectory
 
 -- | Compare times forgiving minor difference.
-
 isCloseTo :: UTCTime -> UTCTime -> Bool
 isCloseTo a b = abs (diffUTCTime a b) < 2
 
 -- | Compare only some fields of 'EntryDescription' record.
-
 softEq :: EntryDescription -> EntryDescription -> Bool
 softEq a b =
-  edCompression a == edCompression b &&
-  isCloseTo (edModTime a) (edModTime b) &&
-  edUncompressedSize a == edUncompressedSize b &&
-  edComment a == edComment b &&
-  M.delete 1 (edExtraField a) == M.delete 1 (edExtraField b)
+  edCompression a == edCompression b
+    && isCloseTo (edModTime a) (edModTime b)
+    && edUncompressedSize a == edUncompressedSize b
+    && edComment a == edComment b
+    && M.delete 1 (edExtraField a) == M.delete 1 (edExtraField b)
 
 -- | Compare two maps describing archive entries in such a way that only
 -- some fields in 'EntryDescription' record are tested.
-
-softEqMap
-  :: Map EntrySelector EntryDescription
-  -> Map EntrySelector EntryDescription
-  -> Bool
+softEqMap ::
+  Map EntrySelector EntryDescription ->
+  Map EntrySelector EntryDescription ->
+  Bool
 softEqMap n m = M.null (M.differenceWith f n m)
-  where f a b = if softEq a b then Nothing else Just a
+  where
+    f a b = if softEq a b then Nothing else Just a
 
 -- | Canonical representation of empty Zip archive.
-
 emptyArchive :: ByteString
-emptyArchive = B.pack
-  [ 0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-  , 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 ]
+emptyArchive =
+  B.pack
+    [ 0x50,
+      0x4b,
+      0x05,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00
+    ]
 
 -- | Recursively list a directory. Do not return paths to empty directories.
-
 listDirRecur :: FilePath -> IO [FilePath]
 listDirRecur path = DList.toList <$> go ""
   where
@@ -787,16 +870,17 @@ listDirRecur path = DList.toList <$> go ""
       let cdir = path </> adir
       raw <- listDirectory cdir
       fmap mconcat . forM raw $ \case
-        ""   -> return mempty
-        "."  -> return mempty
+        "" -> return mempty
+        "." -> return mempty
         ".." -> return mempty
-        x    -> do
+        x -> do
           let fullx = cdir </> x
               adir' = adir </> x
-          isFile <- doesFileExist      fullx
-          isDir  <- doesDirectoryExist fullx
+          isFile <- doesFileExist fullx
+          isDir <- doesDirectoryExist fullx
           if isFile
             then return (DList.singleton adir')
-            else if isDir
-                   then go adir'
-                   else return mempty
+            else
+              if isDir
+                then go adir'
+                else return mempty
