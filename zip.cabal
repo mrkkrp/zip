@@ -1,116 +1,134 @@
-name:                 zip
-version:              1.5.0
-cabal-version:        1.18
-tested-with:          GHC==8.6.5, GHC==8.8.3, GHC==8.10.1
-license:              BSD3
-license-file:         LICENSE.md
-author:               Mark Karpov <markkarpov92@gmail.com>
-maintainer:           Mark Karpov <markkarpov92@gmail.com>
-homepage:             https://github.com/mrkkrp/zip
-bug-reports:          https://github.com/mrkkrp/zip/issues
-category:             Codec
-synopsis:             Operations on zip archives
-build-type:           Simple
-description:          Operations on zip archives.
-extra-doc-files:      CHANGELOG.md
-                    , README.md
-
-flag dev
-  description:        Turn on development settings.
-  manual:             True
-  default:            False
-
-flag disable-bzip2
-  description:         Removes dependency on bzip2 C library and hence support for BZip2 entries.
-  default:             False
-  manual:              True
-
-library
-  build-depends:      base             >= 4.12    && < 5.0
-                    , bytestring       >= 0.9     && < 0.11
-                    , case-insensitive >= 1.2.0.2 && < 1.3
-                    , cereal           >= 0.3     && < 0.6
-                    , conduit          >= 1.3     && < 1.4
-                    , conduit-extra    >= 1.3     && < 1.4
-                    , containers       >= 0.5     && < 0.7
-                    , digest           < 0.1
-                    , directory        >= 1.2.2   && < 1.4
-                    , dlist            >= 0.8     && < 0.9
-                    , exceptions       >= 0.6     && < 0.11
-                    , filepath         >= 1.2     && < 1.5
-                    , monad-control    >= 1.0     && < 1.1
-                    , mtl              >= 2.0     && < 3.0
-                    , resourcet        >= 1.2     && < 1.3
-                    , text             >= 0.2     && < 1.3
-                    , time             >= 1.4     && < 1.10
-                    , transformers     >= 0.4     && < 0.6
-                    , transformers-base
-  if !flag(disable-bzip2)
-    build-depends:    bzlib-conduit    >= 0.3     && < 0.4
-  exposed-modules:    Codec.Archive.Zip
-                    , Codec.Archive.Zip.CP437
-                    , Codec.Archive.Zip.Unix
-  other-modules:      Codec.Archive.Zip.Internal
-                    , Codec.Archive.Zip.Type
-  if flag(dev)
-    ghc-options:      -O0 -Wall -Werror -Wcompat
-                      -Wincomplete-record-updates
-                      -Wincomplete-uni-patterns
-                      -Wnoncanonical-monad-instances
-    cpp-options:      -DHASKELL_ZIP_DEV_MODE
-  else
-    ghc-options:      -O2 -Wall
-  if !flag(disable-bzip2)
-    cpp-options:      -DENABLE_BZIP2
-  default-language:   Haskell2010
-
-  if os(windows)
-    cpp-options:      -DZIP_OS=0
-  else
-    cpp-options:      -DZIP_OS=3
-
-test-suite tests
-  main-is:            Main.hs
-  hs-source-dirs:     tests
-  type:               exitcode-stdio-1.0
-  build-depends:      base             >= 4.12    && < 5.0
-                    , QuickCheck       >= 2.4     && < 3.0
-                    , bytestring       >= 0.9     && < 0.11
-                    , conduit          >= 1.3     && < 1.4
-                    , containers       >= 0.5     && < 0.7
-                    , directory        >= 1.2.2   && < 1.4
-                    , dlist            >= 0.8     && < 0.9
-                    , exceptions       >= 0.6     && < 0.11
-                    , filepath         >= 1.2     && < 1.5
-                    , hspec            >= 2.0     && < 3.0
-                    , temporary        >= 1.1     && < 1.4
-                    , text             >= 0.2     && < 1.3
-                    , time             >= 1.4     && < 1.10
-                    , transformers     >= 0.4     && < 0.6
-                    , zip
-  if flag(dev)
-    ghc-options:      -O0 -Wall -Werror
-  else
-    ghc-options:      -O2 -Wall
-  if !flag(disable-bzip2)
-    cpp-options:      -DENABLE_BZIP2
-  default-language:   Haskell2010
+cabal-version:   1.18
+name:            zip
+version:         1.5.0
+license:         BSD3
+license-file:    LICENSE.md
+maintainer:      Mark Karpov <markkarpov92@gmail.com>
+author:          Mark Karpov <markkarpov92@gmail.com>
+tested-with:     ghc ==8.6.5 ghc ==8.8.3 ghc ==8.10.1
+homepage:        https://github.com/mrkkrp/zip
+bug-reports:     https://github.com/mrkkrp/zip/issues
+synopsis:        Operations on zip archives
+description:     Operations on zip archives.
+category:        Codec
+build-type:      Simple
+extra-doc-files:
+    CHANGELOG.md
+    README.md
 
 source-repository head
-  type:               git
-  location:           https://github.com/mrkkrp/zip.git
+    type:     git
+    location: https://github.com/mrkkrp/zip.git
+
+flag dev
+    description: Turn on development settings.
+    default:     False
+    manual:      True
+
+flag disable-bzip2
+    description:
+        Removes dependency on bzip2 C library and hence support for BZip2 entries.
+
+    default:     False
+    manual:      True
+
+library
+    exposed-modules:
+        Codec.Archive.Zip
+        Codec.Archive.Zip.CP437
+        Codec.Archive.Zip.Unix
+
+    other-modules:
+        Codec.Archive.Zip.Internal
+        Codec.Archive.Zip.Type
+
+    default-language: Haskell2010
+    build-depends:
+        base >=4.12 && <5.0,
+        bytestring >=0.9 && <0.11,
+        case-insensitive >=1.2.0.2 && <1.3,
+        cereal >=0.3 && <0.6,
+        conduit >=1.3 && <1.4,
+        conduit-extra >=1.3 && <1.4,
+        containers >=0.5 && <0.7,
+        digest <0.1,
+        directory >=1.2.2 && <1.4,
+        dlist >=0.8 && <0.9,
+        exceptions >=0.6 && <0.11,
+        filepath >=1.2 && <1.5,
+        monad-control >=1.0 && <1.1,
+        mtl >=2.0 && <3.0,
+        resourcet >=1.2 && <1.3,
+        text >=0.2 && <1.3,
+        time >=1.4 && <1.10,
+        transformers >=0.4 && <0.6,
+        transformers-base -any
+
+    if !flag(disable-bzip2)
+        build-depends: bzlib-conduit >=0.3 && <0.4
+
+    if flag(dev)
+        cpp-options: -DHASKELL_ZIP_DEV_MODE
+        ghc-options:
+            -O0 -Wall -Werror -Wcompat -Wincomplete-record-updates
+            -Wincomplete-uni-patterns -Wnoncanonical-monad-instances
+
+    else
+        ghc-options: -O2 -Wall
+
+    if !flag(disable-bzip2)
+        cpp-options: -DENABLE_BZIP2
+
+    if os(windows)
+        cpp-options: -DZIP_OS=0
+
+    else
+        cpp-options: -DZIP_OS=3
 
 executable haskell-zip-app
-  main-is:            Main.hs
-  hs-source-dirs:     bench-app
-  build-depends:      base             >= 4.12 && < 5.0
-                    , filepath         >= 1.2 && < 1.5
-                    , zip
-  if flag(dev)
-    ghc-options:      -Wall -Werror -Wcompat
-                      -Wincomplete-record-updates
-                      -Wincomplete-uni-patterns
-                      -Wnoncanonical-monad-instances
-  else
-    ghc-options:      -O2 -Wall
-  default-language:   Haskell2010
+    main-is:          Main.hs
+    hs-source-dirs:   bench-app
+    default-language: Haskell2010
+    build-depends:
+        base >=4.12 && <5.0,
+        filepath >=1.2 && <1.5,
+        zip -any
+
+    if flag(dev)
+        ghc-options:
+            -Wall -Werror -Wcompat -Wincomplete-record-updates
+            -Wincomplete-uni-patterns -Wnoncanonical-monad-instances
+
+    else
+        ghc-options: -O2 -Wall
+
+test-suite tests
+    type:             exitcode-stdio-1.0
+    main-is:          Main.hs
+    hs-source-dirs:   tests
+    default-language: Haskell2010
+    build-depends:
+        base >=4.12 && <5.0,
+        QuickCheck >=2.4 && <3.0,
+        bytestring >=0.9 && <0.11,
+        conduit >=1.3 && <1.4,
+        containers >=0.5 && <0.7,
+        directory >=1.2.2 && <1.4,
+        dlist >=0.8 && <0.9,
+        exceptions >=0.6 && <0.11,
+        filepath >=1.2 && <1.5,
+        hspec >=2.0 && <3.0,
+        temporary >=1.1 && <1.4,
+        text >=0.2 && <1.3,
+        time >=1.4 && <1.10,
+        transformers >=0.4 && <0.6,
+        zip -any
+
+    if flag(dev)
+        ghc-options: -O0 -Wall -Werror
+
+    else
+        ghc-options: -O2 -Wall
+
+    if !flag(disable-bzip2)
+        cpp-options: -DENABLE_BZIP2
