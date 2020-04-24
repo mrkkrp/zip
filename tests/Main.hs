@@ -4,10 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Main
-  ( main,
-  )
-where
+module Main (main) where
 
 import Codec.Archive.Zip
 import Codec.Archive.Zip.CP437
