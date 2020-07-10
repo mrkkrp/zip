@@ -4,7 +4,7 @@
 [![Hackage](https://img.shields.io/hackage/v/zip.svg?style=flat)](https://hackage.haskell.org/package/zip)
 [![Stackage Nightly](http://stackage.org/package/zip/badge/nightly)](http://stackage.org/nightly/package/zip)
 [![Stackage LTS](http://stackage.org/package/zip/badge/lts)](http://stackage.org/lts/package/zip)
-[![Build Status](https://travis-ci.org/mrkkrp/zip.svg?branch=master)](https://travis-ci.org/mrkkrp/zip)
+![CI](https://github.com/mrkkrp/zip/workflows/CI/badge.svg?branch=master)
 
 * [Why this library is written](#why-this-library-is-written)
     * [zip-archive](#zip-archive)
