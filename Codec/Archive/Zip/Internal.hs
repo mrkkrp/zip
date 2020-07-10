@@ -26,7 +26,7 @@ where
 import Codec.Archive.Zip.CP437 (decodeCP437)
 import Codec.Archive.Zip.Type
 import Conduit (PrimMonad)
-import Control.Applicative ((<|>), many)
+import Control.Applicative (many, (<|>))
 import Control.Exception (bracketOnError, catchJust)
 import Control.Monad
 import Control.Monad.Catch (MonadThrow (..))
@@ -37,7 +37,7 @@ import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Char (ord)
-import Data.Conduit ((.|), ConduitT, ZipSink (..))
+import Data.Conduit (ConduitT, ZipSink (..), (.|))
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List as CL
@@ -45,10 +45,10 @@ import qualified Data.Conduit.Zlib as Z
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
-import Data.Map.Strict ((!), Map)
+import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromJust, isNothing)
-import Data.Sequence ((><), Seq, (|>))
+import Data.Sequence (Seq, (><), (|>))
 import qualified Data.Sequence as S
 import Data.Serialize
 import qualified Data.Set as E
@@ -864,9 +864,9 @@ putZip64ECDLocator ::
 putZip64ECDLocator ecdOffset = do
   putWord32le 0x07064b50 -- zip64 end of central dir locator signature
   putWord32le 0 -- number of the disk with the start of the zip64 end of
-    -- central directory
+  -- central directory
   putWord64le (fromIntegral ecdOffset) -- relative offset of the zip64 end
-      -- of central directory record
+  -- of central directory record
   putWord32le 1 -- total number of disks
 
 -- | Parse end of central directory record or Zip64 end of central directory
@@ -986,7 +986,7 @@ locateECD path h = sizeCheck
               ||
               -- ↑ happens when zip 64 archive is empty
               cdSig == 0x06054b50
-              then-- ↑ happens when vanilla archive is empty
+              then -- ↑ happens when vanilla archive is empty
                 Just pos
               else Nothing
     checkZip64 pos =

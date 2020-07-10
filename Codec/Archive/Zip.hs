@@ -156,12 +156,12 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import Data.ByteString (ByteString)
-import Data.Conduit ((.|), ConduitT)
+import Data.Conduit (ConduitT, (.|))
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List as CL
 import qualified Data.DList as DList
-import Data.Map.Strict ((!), Map)
+import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as M
 import Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as S
