@@ -98,6 +98,7 @@ For reference, here is a [copy of the specification][specification].
 * Store (no compression, just store files “as is”)
 * [DEFLATE](deflate)
 * [Bzip2](bzip2)
+* [Zstandard](zstd)
 
 The best way to add a new compression method to the library is to write a
 conduit that will do the compression and publish it as a library. `zip` can
@@ -284,3 +285,4 @@ Distributed under BSD 3 clause license.
 [specification]: https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT
 [deflate]: https://en.wikipedia.org/wiki/DEFLATE
 [bzip2]: https://en.wikipedia.org/wiki/Bzip2
+[zstd]: https://en.wikipedia.org/wiki/Zstandard

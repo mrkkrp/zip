@@ -1,3 +1,10 @@
+## Zip 1.6.0
+
+* Added support for Zstandard (zstd) compression
+
+* Added a Cabal flag `-fdisable-zstd` to remove the zstd C library
+  dependency and hence support for Zstd entries.
+
 ## Zip 1.5.0
 
 * Added the `packDirRecur'` function.
