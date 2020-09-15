@@ -182,6 +182,10 @@ data CompressionMethod
     Deflate
   | -- | Compressed using BZip2 algorithm
     BZip2
+  | -- | Compressed using Zstandard algorithm
+    --
+    -- @since 1.6.0
+    Zstd
   deriving (Show, Read, Eq, Ord, Enum, Bounded, Data, Typeable)
 
 ----------------------------------------------------------------------------
@@ -213,6 +217,13 @@ data ZipException
     -- @since 1.3.0
   | BZip2Unsupported
 #endif
+#ifndef ENABLE_ZSTD
+    -- | Thrown when attempting to decompress a 'Zstd' entry and the
+    -- library is compiled without support for it.
+    --
+    -- @since 1.6.0
+  | ZstdUnsupported
+#endif
     ParsingFailed FilePath String
   deriving (Eq, Ord, Typeable)
 
@@ -226,6 +237,12 @@ instance Show ZipException where
   show BZip2Unsupported =
     "Encountered a zipfile entry with BZip2 compression, but " ++
     "the zip library has been built with bzip2 disabled."
+#endif
+
+#ifndef ENABLE_ZSTD
+  show ZstdUnsupported =
+    "Encountered a zipfile entry with Zstd compression, but " ++
+    "the zip library has been built with zstd disabled."
 #endif
 
 instance Exception ZipException

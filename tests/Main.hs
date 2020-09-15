@@ -96,6 +96,9 @@ instance Arbitrary CompressionMethod where
 #ifdef ENABLE_BZIP2
         BZip2,
 #endif
+#ifdef ENABLE_ZSTD
+        Zstd,
+#endif
         Deflate
       ]
 
@@ -386,6 +389,7 @@ versionNeededSpec =
               Store -> [2, 0]
               Deflate -> [2, 0]
               BZip2 -> [4, 6]
+              Zstd -> [6, 3]
           )
 
 addEntrySpec :: SpecWith FilePath

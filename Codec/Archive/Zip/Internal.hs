@@ -66,7 +66,11 @@ import System.IO
 import System.IO.Error (isDoesNotExistError)
 
 #ifdef ENABLE_BZIP2
-import qualified Data.Conduit.BZlib  as BZ
+import qualified Data.Conduit.BZlib as BZ
+#endif
+
+#ifdef ENABLE_ZSTD
+import qualified Data.Conduit.Zstd as Zstandard
 #endif
 
 ----------------------------------------------------------------------------
@@ -167,7 +171,7 @@ data MsDosTime = MsDosTime
 
 -- | “Version created by” to specify when writing archive data.
 zipVersion :: Version
-zipVersion = Version [4, 6] []
+zipVersion = Version [6, 3] []
 
 ----------------------------------------------------------------------------
 -- Higher-level operations
@@ -587,6 +591,13 @@ sinkData h compression = do
           BZ.bzip2 .| dataSink
 #else
       BZip2 -> throwM BZip2Unsupported
+#endif
+#ifdef ENABLE_ZSTD
+      Zstd ->
+        withCompression $
+          Zstandard.compress 1 .| dataSink
+#else
+      Zstd -> throwM ZstdUnsupported
 #endif
   return
     DataDescriptor
@@ -1086,6 +1097,7 @@ toCompressionMethod :: Word16 -> Maybe CompressionMethod
 toCompressionMethod 0 = Just Store
 toCompressionMethod 8 = Just Deflate
 toCompressionMethod 12 = Just BZip2
+toCompressionMethod 93 = Just Zstd
 toCompressionMethod _ = Nothing
 
 -- | Convert 'CompressionMethod' to its numeric representation as per .ZIP
@@ -1094,6 +1106,7 @@ fromCompressionMethod :: CompressionMethod -> Word16
 fromCompressionMethod Store = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2 = 12
+fromCompressionMethod Zstd = 93
 
 -- | Check if an entry with these parameters needs Zip64 extension.
 needsZip64 :: EntryDescription -> Bool
@@ -1113,6 +1126,7 @@ getZipVersion zip64 m = max zip64ver mver
       Just Store -> [2, 0]
       Just Deflate -> [2, 0]
       Just BZip2 -> [4, 6]
+      Just Zstd -> [6, 3]
 
 -- | Return decompressing 'Conduit' corresponding to the given compression
 -- method.
@@ -1124,9 +1138,15 @@ decompressingPipe Store = C.awaitForever C.yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 
 #ifdef ENABLE_BZIP2
-decompressingPipe BZip2   = BZ.bunzip2
+decompressingPipe BZip2 = BZ.bunzip2
 #else
-decompressingPipe BZip2   = throwM BZip2Unsupported
+decompressingPipe BZip2 = throwM BZip2Unsupported
+#endif
+
+#ifdef ENABLE_ZSTD
+decompressingPipe Zstd = Zstandard.decompress
+#else
+decompressingPipe Zstd = throwM ZstdUnsupported
 #endif
 
 -- | Sink that calculates CRC32 check sum for incoming stream.

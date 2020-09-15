@@ -32,6 +32,13 @@ flag disable-bzip2
     default:     False
     manual:      True
 
+flag disable-zstd
+    description:
+        Removes dependency on zstd C library and hence support for Zstandard entries.
+
+    default:     False
+    manual:      True
+
 library
     exposed-modules:
         Codec.Archive.Zip
@@ -67,6 +74,9 @@ library
     if !flag(disable-bzip2)
         build-depends: bzlib-conduit >=0.3 && <0.4
 
+    if !flag(disable-zstd)
+        build-depends: conduit-zstd >=0.0.2 && <0.1
+
     if flag(dev)
         cpp-options: -DHASKELL_ZIP_DEV_MODE
         ghc-options:
@@ -78,6 +88,9 @@ library
 
     if !flag(disable-bzip2)
         cpp-options: -DENABLE_BZIP2
+
+    if !flag(disable-zstd)
+        cpp-options: -DENABLE_ZSTD
 
     if os(windows)
         cpp-options: -DZIP_OS=0
@@ -132,3 +145,6 @@ test-suite tests
 
     if !flag(disable-bzip2)
         cpp-options: -DENABLE_BZIP2
+
+    if !flag(disable-zstd)
+        cpp-options: -DENABLE_ZSTD
