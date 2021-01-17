@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -173,6 +174,10 @@ import Data.Word (Word16, Word32)
 import System.Directory
 import System.FilePath ((</>))
 import qualified System.FilePath as FP
+#ifndef mingw32_HOST_OS
+import System.Posix as Unix
+import Codec.Archive.Zip.Unix as Unix
+#endif
 import System.IO.Error (isDoesNotExistError)
 
 ----------------------------------------------------------------------------
@@ -454,6 +459,11 @@ loadEntry t s path = do
   let src = CB.sourceFile apath
   addPending (I.SinkEntry t src s)
   addPending (I.SetModTime modTime s)
+
+#ifndef mingw32_HOST_OS
+  status <- liftIO $ getFileStatus path
+  setExternalFileAttrs (Unix.fromFileMode (fileMode status)) s
+#endif
 
 -- | Copy an entry “as is” from another zip archive. If the entry does not
 -- exist in that archive, 'EntryDoesNotExist' will be eventually thrown.

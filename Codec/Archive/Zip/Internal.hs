@@ -65,6 +65,10 @@ import System.FilePath
 import System.IO
 import System.IO.Error (isDoesNotExistError)
 
+#ifndef mingw32_HOST_OS
+import Codec.Archive.Zip.Unix -- load only on nix to avoid warning message
+#endif
+
 #ifdef ENABLE_BZIP2
 import qualified Data.Conduit.BZlib as BZ
 #endif
@@ -495,8 +499,8 @@ sinkEntry h s o src EditingActions {..} = do
         GenericOrigin -> currentTime
         Borrowed ed -> edModTime ed
       extFileAttr = case o of
-        GenericOrigin -> M.findWithDefault 0 s eaExtFileAttr
-        Borrowed _ -> M.findWithDefault 0 s eaExtFileAttr
+        GenericOrigin -> M.findWithDefault defaultFileMode s eaExtFileAttr
+        Borrowed _ -> M.findWithDefault defaultFileMode s eaExtFileAttr
       oldExtraFields = case o of
         GenericOrigin -> M.empty
         Borrowed ed -> edExtraField ed
@@ -1197,4 +1201,15 @@ ffffffff = 5000
 #else
 ffff     = 0xffff
 ffffffff = 0xffffffff
+#endif
+
+-- | Default permissions for the files, permissions not set on windows,
+-- and are set to rw on unix. It mimics behavior of zip utility
+defaultFileMode :: Word32
+
+#ifdef mingw32_HOST_OS
+defaultFileMode = 0
+
+#else
+defaultFileMode = fromFileMode 0o600
 #endif
