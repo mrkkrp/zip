@@ -1,3 +1,9 @@
+## Zip 1.7.0
+
+* Set user permissions on linux platform as follows: if an existing file is
+  added, use its permissions; if an entry is generated from a bytestring or
+  a stream, use 0600. This behavior mimics the zip utility.
+
 ## Zip 1.6.0
 
 * Added support for Zstandard (zstd) compression

@@ -116,11 +116,12 @@ instance Show RelPath where
 instance Arbitrary RelPath where
   arbitrary = do
     p <-
-      intercalate "/"
-        <$> listOf1
-          ( (++) <$> vectorOf 3 charGen
-              <*> listOf1 charGen
-          )
+      resize 10 $
+        intercalate "/"
+          <$> listOf1
+            ( (++) <$> vectorOf 3 charGen
+                <*> listOf1 charGen
+            )
     case mkEntrySelector p of
       Nothing -> arbitrary
       Just _ -> return (RelPath p)
