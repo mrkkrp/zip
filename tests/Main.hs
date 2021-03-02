@@ -39,10 +39,6 @@ import System.IO.Temp
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
 
-#if !MIN_VERSION_base(4,13,0)
-import Data.Semigroup ((<>))
-#endif
-
 -- | Zip tests. Please note that Zip64 feature is not currently tested
 -- automatically because for it to expose itself we need > 4GB of
 -- data. Handling such quantities of data locally is problematic and even
