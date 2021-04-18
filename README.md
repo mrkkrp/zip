@@ -23,39 +23,36 @@
 
 This is a feature-rich, memory-efficient, and type-safe library to
 manipulate Zip archives. The library is the most complete and efficient
-implementation of .ZIP specification in Haskell (at least from open-sourced
-ones). In particular, it's created with large multimedia data in mind and
-provides all features users might expect, comparable in terms of feature-set
-with libraries like `libzip` in C.
+implementation of the .ZIP specification in Haskell (at least from the
+open-sourced ones). In particular, it's created with large multimedia data
+in mind and provides all features users might expect, comparable in terms of
+feature-set with libraries like `libzip` in C.
 
 ## Why this library is written
 
 There are a few libraries to work with Zip archives, yet every one of them
-provides only a subset of all the functionality a user may need (obviously
-the libraries provide functionality that their authors needed) and otherwise
-is flawed in some way so it cannot be easily used in some situations. Let's
-examine all the libraries available on Hackage to understand motivation for
-this package.
+provides only a subset of useful functionality or otherwise is flawed in
+some way so it cannot be easily used in some situations. Let's examine all
+libraries available on Hackage to understand the motivation for this
+package.
 
 ### zip-archive
 
 `zip-archive` is a widely used library. It's quite old, well-known and
-simple to use. However it creates Zip archives purely, as `ByteStrings`s in
-memory that you can then write to the file system. This is not acceptable if
-you work with more-or-less big data. For example, if you have collection of
-files with total size of 500 MB and you want to pack them into archive, you
-can easily consume up to 1 GB of memory (the files plus resulting archive).
-Not always you can afford to do this or do this at scale. Even if you want
-just to look at list of archive entries it will read it into memory in all
-its entirety.
+simple to use. However, it creates Zip archives purely, as `ByteStrings`s in
+memory. This is not acceptable if you work with big data. For example, if
+you have a collection of files with the total size 500 MB and you want to
+pack them into an archive, you can easily consume up to 1 GB of memory (the
+files plus the resulting archive). This is not always affordable. Even if
+you want just to look at the list of archive entries it will read the entire
+archive into memory.
 
 ### LibZip
 
-This is a binding to C library [`libzip`][libzip]. There is always a certain
-kind of trouble with bindings. For example, you need to take care that
-target library is installed and its version is compatible with the version
-of your binding. Yes, this means additional headaches. It should be just
-“plug and play”, but now you need to watch out for compatibility.
+This is a binding to the C library [`libzip`][libzip]. There is always a
+certain kind of trouble with bindings. For example, you need to ensure that
+the target library is installed and its version is compatible with the
+version of your binding.
 
 It's not that bad with libraries that do not break their API for years, but
 it's not the case with `libzip`. As the maintainer of `LibZip` puts it:
@@ -64,25 +61,24 @@ it's not the case with `libzip`. As the maintainer of `LibZip` puts it:
 > 0.11.x, then you should use LibZip 0.11. If your C library is 1.0, then
 > you should use LibZip master branch (not yet released to Hackage).
 
-Now, on my machine I have version 1.0. To put the package on Stackage we had
-to use version 0.10, because Stackage uses Ubuntu to build packages and
-libraries on Ubuntu are always ancient. This means that I cannot use the
+Now, on my machine I have the version 1.0. To put the package on Stackage we
+had to use the version 0.10, because Stackage uses Ubuntu to build packages
+and libraries on Ubuntu are always ancient. This means that I cannot use the
 version of the library from Stackage, and I don't yet know what will be on
 the server.
 
-After much frustration with all these things I decided to avoid using
-`LibZip`, because after all, this is not that sort of a project that
-shouldn't be done completely in Haskell. By rewriting this in Haskell, I
-also can make it safer to use.
+After much frustration, I decided to avoid using `LibZip`. After all, this
+is not a project that shouldn't be done completely in Haskell. By rewriting
+this in Haskell, I also can make it safer to use.
 
 ### zip-conduit
 
 This one uses the right approach: leverage a good streaming library
-(`conduit`) for memory-efficient processing. This is however is not
-feature-rich and has certain problems (including programming style, it uses
-`error` if an entry is missing in archive, among other things), some of them
-are reported on its issue tracker. It also does not appear to be maintained
-(last sign of activity was on December 23, 2014).
+(`conduit`) for memory-efficient processing. The library is however not
+feature-rich and has certain problems (including the programming style, it
+uses `error` if an entry is missing in the archive, among other things),
+some of them are reported on its issue tracker. It also does not appear to
+be maintained (the last sign of activity was on December 23, 2014).
 
 ## Features
 
@@ -116,12 +112,11 @@ the .ZIP specification), so to hell with it.
 
 ### Sources of file data
 
-The library gives you many options how to get file contents to compress and
-how to get extracted data. The following methods are supported:
+The following sources are supported:
 
 * *File name.* This is an efficient method to perform compression or
-  decompression. You just specify where to get data or where to save it and
-  the rest is handled by the library.
+  decompression. You specify where to get data or where to save it and the
+  rest is handled by the library.
 * *Conduit source or sink.*
 * *ByteString.* Use it only with small data.
 * *Copy file from another archive.* An efficient operation, file is copied
@@ -130,60 +125,60 @@ how to get extracted data. The following methods are supported:
 ### ZIP64
 
 When necessary, the `ZIP64` extension is automatically used. It's necessary
-when anything from this list takes place:
+when:
 
-* Total size of archive is greater than 4 GB.
-* Size of a single compressed/uncompressed file in archive is greater than 4
-  GB.
-* There are more than 65535 entries in archive.
+* The total size of the archive is greater than 4 GB.
+* The size of a single compressed/uncompressed file in the archive is
+  greater than 4 GB.
+* There are more than 65535 entries in the archive.
 
-The library is particularly suited for processing of large files. For
-example, I've been able to easily create 6.5 GB archive with reasonable
-speed and without significant memory consumption.
+The library is particularly well suited for processing large files. For
+example, I've been able to create 6.5 GB archive with reasonable speed and
+without significant memory consumption.
 
 ### Filenames
 
-The library has API that makes it impossible to create archive with
+The library has an API that makes it impossible to create archive with
 non-portable or invalid file names in it.
 
 As of .ZIP specification 6.3.2, files with Unicode symbols in their names
-can be put into Zip archives. The library supports mechanisms for this and
+can be stored in Zip archives. The library supports mechanisms for this and
 uses them automatically when needed. Besides UTF-8, CP437 is also supported
-as it's required in the specification.
+as per the specification.
 
 ### Meta-information about files
 
-The library allows to attach comments to entire archive or individual files,
-and also gives its user full control over extra fields that are written to
-file headers, so the user can store arbitrary information about file in the
-archive.
+The library allows us to attach comments to the entire archive or individual
+files, and also gives its user full control over extra fields that are
+written to file headers, so the user can store arbitrary information about
+files in the archive.
 
 ## Quick start
 
 The module `Codec.Archive.Zip` provides everything you may need to
 manipulate Zip archives. There are three things that should be clarified
-right away, to avoid confusion in the future.
+right away to avoid confusion.
 
 First, we use the `EntrySelector` type that can be obtained from relative
 `FilePath`s (paths to directories are not allowed). This method may seem
 awkward at first, but it will protect you from the problems with portability
 when your archive is unpacked on a different platform.
 
-The second thing, that is rather a consequence of the first, is that there
-is no way to add directories, or to be precise, *empty directories* to your
-archive. This approach is used in Git, and I find it quite sane.
+Second, there is no way to add directories, or to be precise, *empty
+directories* to your archive. This approach is used in Git and I find it
+sane.
 
-Finally, the third feature of the library is that it does not modify archive
-instantly, because doing so on every manipulation would often be
-inefficient. Instead we maintain a collection of pending actions that can be
-turned into an optimized procedure that efficiently modifies archive in one
-pass. Normally this should be of no concern to you, because all actions are
-performed automatically when you leave the realm of `ZipArchive` monad. If,
-however, you ever need to force an update, the `commit` function is your
-friend. There are even “undo” functions, by the way.
+Finally, the third feature of the library is that it does not modify the
+archive instantly, because doing so on every manipulation would often be
+inefficient. Instead, we maintain a collection of pending actions that can
+be turned into an optimized procedure that efficiently modifies the archive
+in one pass. Normally, this should be of no concern to you, because all
+actions are performed automatically when you leave the `ZipArchive` monad.
+If, however, you ever need to force an update, the `commit` function is your
+friend.
 
-Let's take a look at some examples that show how to accomplish most typical
-tasks with help of the library.
+Let's take a look at some examples that show how to accomplish most common
+tasks.
 
 To get full information about archive entries, use `getEntries`:
 
@@ -210,7 +205,7 @@ possible to extract contents of an entry as a strict `ByteString`:
 λ> withArchive archivePath (saveEntry entrySelector pathToFile)
 ```
 
-…and finally just unpack the entire archive into some directory:
+…and finally just unpack the entire archive into a directory:
 
 ```haskell
 λ> withArchive archivePath (unpackInto destDir)
@@ -218,9 +213,9 @@ possible to extract contents of an entry as a strict `ByteString`:
 
 See also `getArchiveComment` and `getArchiveDescription`.
 
-Modifying is also easy, efficient, and powerful. When you want to create a
-new archive use `createArchive`, otherwise `withArchive` will do. To add an
-entry from `ByteString`:
+Modifying is also easy. When you want to create a new archive use
+`createArchive`, otherwise `withArchive` will do. To add an entry from
+`ByteString`:
 
 ```haskell
 λ> createArchive archivePath (addEntry Store "Hello, World!" entrySelector)
@@ -273,7 +268,7 @@ missing something.
 You can contact the maintainer via [the issue
 tracker](https://github.com/mrkkrp/zip/issues).
 
-Pull requests are also welcome.
+Pull requests are welcome.
 
 ## License
 

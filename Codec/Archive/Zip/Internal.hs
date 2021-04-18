@@ -12,7 +12,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- Low-level, non-public concepts and operations.
+-- Low-level, non-public types and operations.
 module Codec.Archive.Zip.Internal
   ( PendingAction (..),
     targetEntry,
@@ -80,47 +80,47 @@ import qualified Data.Conduit.Zstd as Zstandard
 ----------------------------------------------------------------------------
 -- Data types
 
--- | The sum type describes all possible actions that can be performed on
+-- | The sum type describes all possible actions that can be performed on an
 -- archive.
 data PendingAction
-  = -- | Add entry given its 'Source'
+  = -- | Add an entry given its 'Source'
     SinkEntry
       CompressionMethod
       (ConduitT () ByteString (ResourceT IO) ())
       EntrySelector
   | -- | Copy an entry form another archive without re-compression
     CopyEntry FilePath EntrySelector EntrySelector
-  | -- | Change name the entry inside archive
+  | -- | Change the name of the entry inside archive
     RenameEntry EntrySelector EntrySelector
-  | -- | Delete entry from archive
+  | -- | Delete an entry from archive
     DeleteEntry EntrySelector
-  | -- | Change compression method on an entry
+  | -- | Change the compression method on an entry
     Recompress CompressionMethod EntrySelector
-  | -- | Set comment for a particular entry
+  | -- | Set the comment for a particular entry
     SetEntryComment Text EntrySelector
-  | -- | Delete comment of particular entry
+  | -- | Delete theh comment of a particular entry
     DeleteEntryComment EntrySelector
-  | -- | Set modification time of particular entry
+  | -- | Set the modification time of a particular entry
     SetModTime UTCTime EntrySelector
-  | -- | Add an extra field to specified entry
+  | -- | Add an extra field to the specified entry
     AddExtraField Word16 ByteString EntrySelector
-  | -- | Delete an extra filed of specified entry
+  | -- | Delete an extra filed of the specified entry
     DeleteExtraField Word16 EntrySelector
-  | -- | Set comment for entire archive
+  | -- | Set the comment for the entire archive
     SetArchiveComment Text
-  | -- | Delete comment of entire archive
+  | -- | Delete the comment of the entire archive
     DeleteArchiveComment
-  | -- | Set an external file attribute for specified entry
+  | -- | Set an external file attribute for the specified entry
     SetExternalFileAttributes Word32 EntrySelector
 
--- | Collection of maps describing how to produce entries in resulting
+-- | A collection of maps describing how to produce entries in the resulting
 -- archive.
 data ProducingActions = ProducingActions
   { paCopyEntry :: Map FilePath (Map EntrySelector EntrySelector),
     paSinkEntry :: Map EntrySelector (ConduitT () ByteString (ResourceT IO) ())
   }
 
--- | Collection of editing actions, that is, actions that modify already
+-- | A collection of editing actions, that is, actions that modify already
 -- existing entries.
 data EditingActions = EditingActions
   { eaCompression :: Map EntrySelector CompressionMethod,
@@ -132,18 +132,18 @@ data EditingActions = EditingActions
     eaExtFileAttr :: Map EntrySelector Word32
   }
 
--- | Origin of entries that can be streamed into archive.
+-- | The origin of entries that can be streamed into archive.
 data EntryOrigin
   = GenericOrigin
   | Borrowed EntryDescription
 
--- | Type of file header: local or central directory.
+-- | The type of the file header: local or central directory.
 data HeaderType
   = LocalHeader
   | CentralDirHeader
   deriving (Eq)
 
--- | Data descriptor representation.
+-- | The data descriptor representation.
 data DataDescriptor = DataDescriptor
   { ddCRC32 :: Word32,
     ddCompressedSize :: Natural,
@@ -226,9 +226,9 @@ scanArchive path = withBinaryFile path ReadMode $ \h -> do
     Nothing ->
       throwM (ParsingFailed path "Cannot locate end of central directory")
 
--- | Given location of archive and information about specific archive entry
--- 'EntryDescription', return 'Source' of its data. Actual data can be
--- compressed or uncompressed depending on the third argument.
+-- | Given location of the archive and information about a specific archive
+-- entry 'EntryDescription', return 'Source' of its data. The actual data
+-- can be compressed or uncompressed depending on the third argument.
 sourceEntry ::
   (PrimMonad m, MonadThrow m, MonadResource m) =>
   -- | Path to archive that contains the entry
@@ -257,8 +257,9 @@ sourceEntry path EntryDescription {..} d =
         else C.awaitForever C.yield
 
 -- | Undertake /all/ actions specified as the fourth argument of the
--- function. This transforms given pending actions so they can be performed
--- in one pass, and then they are performed in the most efficient way.
+-- function. This transforms the given pending actions so they can be
+-- performed in one pass, and then they are applied in the most efficient
+-- way.
 commit ::
   -- | Location of archive file to edit or create
   FilePath ->
@@ -291,8 +292,8 @@ commit path ArchiveDescription {..} entries xs =
           )
     writeCD h comment (copiedCD `M.union` sunkCD)
 
--- | Create a new file with the guarantee that in case of exception the old
--- file will be preserved intact. The file is only updated\/replaced if the
+-- | Create a new file with the guarantee that in the case of an exception
+-- the old file will be intact. The file is only updated\/replaced if the
 -- second argument finishes without exceptions.
 withNewFile ::
   -- | Name of file to create
@@ -309,9 +310,10 @@ withNewFile fpath action =
     allocate = openBinaryTempFile (takeDirectory fpath) ".zip"
     release (path, h) = do
       hClose h
-      -- Despite using `bracketOnError` the file is not guaranteed to exist here
-      -- since we could be interrupted with an async exception after the file has
-      -- been renamed. Therefore, we silentely ignore `DoesNotExistError`.
+      -- Despite using `bracketOnError` the file is not guaranteed to exist
+      -- here since we could be interrupted with an async exception after
+      -- the file has been renamed. Therefore, we silentely ignore
+      -- `DoesNotExistError`.
       catchJust (guard . isDoesNotExistError) (removeFile path) (const $ pure ())
 
 -- | Determine what comment in new archive will look like given its original
@@ -445,8 +447,8 @@ optimize =
     er _ Nothing = Nothing
 
 -- | Copy entries from another archive and write them into the file
--- associated with given handle. This can throw 'EntryDoesNotExist' if there
--- is no such entry in that archive.
+-- associated with the given handle. This can throw 'EntryDoesNotExist' if
+-- there is no such entry in that archive.
 copyEntries ::
   -- | Opened 'Handle' of zip archive file
   Handle ->
@@ -472,20 +474,20 @@ copyEntries h path m e = do
           e
   return (M.fromList done)
 
--- | Sink entry from given stream into the file associated with given
--- 'Handle'.
+-- | Sink an entry from the given stream into the file associated with the
+-- given 'Handle'.
 sinkEntry ::
   -- | Opened 'Handle' of zip archive file
   Handle ->
-  -- | Name of entry to add
+  -- | Name of the entry to add
   EntrySelector ->
-  -- | Origin of entry (can contain additional info)
+  -- | Origin of the entry (can contain additional info)
   EntryOrigin ->
-  -- | Source of entry contents
+  -- | Source of the entry contents
   ConduitT () ByteString (ResourceT IO) () ->
   -- | Additional info that can influence result
   EditingActions ->
-  -- | Info to generate central directory file headers later
+  -- | Info to generate the central directory file headers later
   IO (EntrySelector, EntryDescription)
 sinkEntry h s o src EditingActions {..} = do
   currentTime <- getCurrentTime
@@ -561,9 +563,9 @@ sinkEntry h s o src EditingActions {..} = do
   hSeek h AbsoluteSeek afterStreaming
   return (s, desc2)
 
--- | Create 'Sink' to stream data there. Once streaming is finished, return
--- 'DataDescriptor' for the streamed data. The action /does not/ close given
--- 'Handle'.
+-- | Create a 'Sink' to stream data there. Once streaming is finished,
+-- return 'DataDescriptor' for the streamed data. The action /does not/
+-- close the given 'Handle'.
 sinkData ::
   -- | Opened 'Handle' of zip archive file
   Handle ->
@@ -610,14 +612,14 @@ sinkData h compression = do
         ddUncompressedSize = uncompressedSize
       }
 
--- | Append central directory entries and end of central directory record to
--- the file that given 'Handle' is associated with. Note that this
+-- | Append central directory entries and the end of central directory
+-- record to the file that given 'Handle' is associated with. Note that this
 -- automatically writes Zip64 end of central directory record and Zip64 end
 -- of central directory locator when necessary.
 writeCD ::
   -- | Opened handle of zip archive file
   Handle ->
-  -- | Commentary to entire archive
+  -- | Commentary to the entire archive
   Maybe Text ->
   -- | Info about already written local headers and entry data
   Map EntrySelector EntryDescription ->
@@ -641,8 +643,8 @@ writeCD h comment m = do
 ----------------------------------------------------------------------------
 -- Binary serialization
 
--- | Extract the number of bytes between start of file name in local header
--- and start of actual data.
+-- | Extract the number of bytes between the start of file name in local
+-- header and the start of actual data.
 getLocalHeaderGap :: Get Integer
 getLocalHeaderGap = do
   getSignature 0x04034b50
@@ -658,7 +660,7 @@ getLocalHeaderGap = do
   extraFieldSize <- fromIntegral <$> getWord16le -- extra field length
   return (fileNameSize + extraFieldSize)
 
--- | Parse central directory file headers and put them into 'Map'.
+-- | Parse central directory file headers and put them into a 'Map'.
 getCD :: Get (Map EntrySelector EntryDescription)
 getCD = M.fromList . catMaybes <$> many getCDHeader
 
@@ -737,7 +739,7 @@ getExtraField = do
   body <- getBytes (fromIntegral size) -- content
   return (header, body)
 
--- | Get signature. If the extracted data is not equal to provided
+-- | Get signature. If the extracted data is not equal to the provided
 -- signature, fail.
 getSignature :: Word32 -> Get ()
 getSignature sig = do
@@ -788,13 +790,13 @@ putExtraField m = forM_ (M.keys m) $ \headerId -> do
   putWord16le (fromIntegral $ B.length b)
   putByteString b
 
--- | Create 'ByteString' representing entire central directory.
+-- | Create 'ByteString' representing the entire central directory.
 putCD :: Map EntrySelector EntryDescription -> Put
 putCD m = forM_ (M.keys m) $ \s ->
   putHeader CentralDirHeader s (m ! s)
 
--- | Create 'ByteString' representing local file header if the first
--- argument is 'False' and central directory file header otherwise.
+-- | Create 'ByteString' representing a local file header if the first
+-- argument is 'False' and a central directory file header otherwise.
 putHeader ::
   -- | Type of header to generate
   HeaderType ->
@@ -870,7 +872,7 @@ putZip64ECD totalCount cdSize cdOffset = do
   putWord64le (fromIntegral cdSize) -- size of the central directory
   putWord64le (fromIntegral cdOffset) -- offset of central directory
 
--- | Create 'ByteString' representing Zip64 end of central directory
+-- | Create 'ByteString' representing Zip64 end of the central directory
 -- locator.
 putZip64ECDLocator ::
   -- | Offset of Zip64 end of central directory
@@ -884,8 +886,8 @@ putZip64ECDLocator ecdOffset = do
   -- of central directory record
   putWord32le 1 -- total number of disks
 
--- | Parse end of central directory record or Zip64 end of central directory
--- record depending on signature binary data begins with.
+-- | Parse end of the central directory record or Zip64 end of the central
+-- directory record depending on signature binary data begins with.
 getECD :: Get ArchiveDescription
 getECD = do
   sig <- getWord32le -- end of central directory signature
@@ -926,7 +928,7 @@ getECD = do
         adCDSize = fromIntegral cdSize
       }
 
--- | Create 'ByteString' representing end of central directory record.
+-- | Create a 'ByteString' representing the end of central directory record.
 putECD ::
   -- | Total number of entries
   Natural ->
@@ -950,8 +952,8 @@ putECD totalCount cdSize cdOffset mcomment = do
   putWord16le (fromIntegral $ B.length comment)
   putByteString comment
 
--- | Find absolute offset of end of central directory record or, if present,
--- Zip64 end of central directory record.
+-- | Find the absolute offset of the end of central directory record or, if
+-- present, Zip64 end of central directory record.
 locateECD :: FilePath -> Handle -> IO (Maybe Integer)
 locateECD path h = sizeCheck
   where
@@ -1040,7 +1042,7 @@ withSaturation x =
   where
     bound = maxBound :: b
 
--- | Determine target entry of action.
+-- | Determine the target entry of an action.
 targetEntry :: PendingAction -> Maybe EntrySelector
 targetEntry (SinkEntry _ _ s) = Just s
 targetEntry (CopyEntry _ _ s) = Just s
@@ -1056,7 +1058,7 @@ targetEntry (SetExternalFileAttributes _ s) = Just s
 targetEntry (SetArchiveComment _) = Nothing
 targetEntry DeleteArchiveComment = Nothing
 
--- | Decode 'ByteString'. The first argument indicates whether we should
+-- | Decode a 'ByteString'. The first argument indicates whether we should
 -- treat it as UTF-8 (in case bit 11 of general-purpose bit flag is set),
 -- otherwise the function assumes CP437. Note that since not every stream of
 -- bytes constitutes valid UTF-8 text, this function can fail. In that case
@@ -1072,20 +1074,20 @@ decodeText False = Just . decodeCP437
 decodeText True = either (const Nothing) Just . T.decodeUtf8'
 
 -- | Detect if the given text needs newer Unicode-aware features to be
--- properly encoded in archive.
+-- properly encoded in the archive.
 needsUnicode :: Text -> Bool
 needsUnicode = not . T.all validCP437
   where
     validCP437 x = ord x <= 127
 
--- | Convert numeric representation (as per .ZIP specification) of version
--- into 'Version'.
+-- | Convert numeric representation (as per the .ZIP specification) of
+-- version into 'Version'.
 toVersion :: Word16 -> Version
 toVersion x = makeVersion [major, minor]
   where
     (major, minor) = quotRem (fromIntegral $ x .&. 0x00ff) 10
 
--- | Covert 'Version' to its numeric representation as per .ZIP
+-- | Covert 'Version' to its numeric representation as per the .ZIP
 -- specification.
 fromVersion :: Version -> Word16
 fromVersion v = fromIntegral ((ZIP_OS `shiftL` 8) .|. (major * 10 + minor))
@@ -1096,7 +1098,7 @@ fromVersion v = fromIntegral ((ZIP_OS `shiftL` 8) .|. (major * 10 + minor))
         v0 : _ -> (v0, 0)
         [] -> (0, 0)
 
--- | Get compression method form its numeric representation.
+-- | Get the compression method form its numeric representation.
 toCompressionMethod :: Word16 -> Maybe CompressionMethod
 toCompressionMethod 0 = Just Store
 toCompressionMethod 8 = Just Deflate
@@ -1104,23 +1106,23 @@ toCompressionMethod 12 = Just BZip2
 toCompressionMethod 93 = Just Zstd
 toCompressionMethod _ = Nothing
 
--- | Convert 'CompressionMethod' to its numeric representation as per .ZIP
--- specification.
+-- | Convert 'CompressionMethod' to its numeric representation as per the
+-- .ZIP specification.
 fromCompressionMethod :: CompressionMethod -> Word16
 fromCompressionMethod Store = 0
 fromCompressionMethod Deflate = 8
 fromCompressionMethod BZip2 = 12
 fromCompressionMethod Zstd = 93
 
--- | Check if an entry with these parameters needs Zip64 extension.
+-- | Check if an entry with these parameters needs the Zip64 extension.
 needsZip64 :: EntryDescription -> Bool
 needsZip64 EntryDescription {..} =
   any
     (>= ffffffff)
     [edOffset, edCompressedSize, edUncompressedSize]
 
--- | Determine “version needed to extract” that should be written to headers
--- given need of Zip64 feature and compression method.
+-- | Determine “version needed to extract” that should be written to the
+-- headers given the need of the Zip64 feature and the compression method.
 getZipVersion :: Bool -> Maybe CompressionMethod -> Version
 getZipVersion zip64 m = max zip64ver mver
   where
@@ -1132,7 +1134,7 @@ getZipVersion zip64 m = max zip64ver mver
       Just BZip2 -> [4, 6]
       Just Zstd -> [6, 3]
 
--- | Return decompressing 'Conduit' corresponding to the given compression
+-- | Return a decompressing 'Conduit' corresponding to the given compression
 -- method.
 decompressingPipe ::
   (PrimMonad m, MonadThrow m, MonadResource m) =>
@@ -1153,11 +1155,11 @@ decompressingPipe Zstd = Zstandard.decompress
 decompressingPipe Zstd = throwM ZstdUnsupported
 #endif
 
--- | Sink that calculates CRC32 check sum for incoming stream.
+-- | A sink that calculates the CRC32 check sum for an incoming stream.
 crc32Sink :: ConduitT ByteString Void (ResourceT IO) Word32
 crc32Sink = CL.fold crc32Update 0
 
--- | Convert 'UTCTime' to MS-DOS time format.
+-- | Convert 'UTCTime' to the MS-DOS time format.
 toMsDosTime :: UTCTime -> MsDosTime
 toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
   where
@@ -1189,9 +1191,9 @@ fromMsDosTime MsDosTime {..} =
 -- We use the constants of the type 'Natural' instead of literals to protect
 -- ourselves from overflows on 32 bit systems.
 --
--- If we're in development mode, use lower values so the tests get a chance
--- to check all cases (otherwise we would need to generate way too big
--- archives on CI).
+-- If we're in the development mode, use lower values so the tests get a
+-- chance to check all cases (otherwise we would need to generate way too
+-- big archives on CI).
 
 ffff, ffffffff :: Natural
 
@@ -1203,8 +1205,8 @@ ffff     = 0xffff
 ffffffff = 0xffffffff
 #endif
 
--- | Default permissions for the files, permissions not set on windows,
--- and are set to rw on unix. It mimics behavior of zip utility
+-- | The default permissions for the files, permissions not set on Windows,
+-- and are set to rw on Unix. This mimics the behavior of the zip utility.
 defaultFileMode :: Word32
 
 #ifdef mingw32_HOST_OS

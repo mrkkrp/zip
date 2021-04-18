@@ -39,10 +39,9 @@ import System.IO.Temp
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
 
--- | Zip tests. Please note that Zip64 feature is not currently tested
--- automatically because for it to expose itself we need > 4GB of
--- data. Handling such quantities of data locally is problematic and even
--- more problematic in the context of CI server.
+-- | Zip tests. Please note that the Zip64 feature is not currently tested
+-- automatically because we'd need > 4GB of data. Handling such quantities
+-- of data locally is problematic and even more problematic on CI.
 main :: IO ()
 main = hspec $ do
   describe "mkEntrySelector" mkEntrySelectorSpec
@@ -762,40 +761,42 @@ unpackIntoSpec =
 ----------------------------------------------------------------------------
 -- Helpers
 
--- | Change the size parameter of generator by dividing it by 2.
+-- | Change the size parameter of a generator by dividing it by 2.
 downScale :: Gen a -> Gen a
 downScale = scale (`div` 2)
 
--- | Check whether given exception is 'EntrySelectorException' with specific
--- path inside.
+-- | Check whether a given exception is 'EntrySelectorException' with a
+-- specific path inside.
 isEntrySelectorException :: FilePath -> EntrySelectorException -> Bool
 isEntrySelectorException path (InvalidEntrySelector p) = p == path
 
--- | Check whether given exception is 'ParsingFailed' exception with
+-- | Check whether a given exception is 'ParsingFailed' exception with a
 -- specific path and error message inside.
 isParsingFailed :: FilePath -> String -> ZipException -> Bool
 isParsingFailed path msg (ParsingFailed path' msg') =
   path == path' && msg == msg'
 isParsingFailed _ _ _ = False
 
--- | Create sandbox directory to model some situation in it and run some
--- tests. Note that we're using new unique sandbox directory for each test
--- case to avoid contamination and it's unconditionally deleted after test
--- case finishes. The function returns vacant file path in that directory.
+-- | Create a sandbox directory to model some situation in it and run some
+-- tests. Note that we're using a new unique sandbox directory for each test
+-- case to avoid contamination and it's unconditionally deleted after the
+-- test case finishes. The function returns a vacant file path in that
+-- directory.
 withSandbox :: ActionWith FilePath -> IO ()
 withSandbox action = withSystemTempDirectory "zip-sandbox" $ \dir ->
   action (dir </> "foo.zip")
 
--- | Given primary name (name of archive), generate a name that does not
+-- | Given a primary name (name of archive), generate a name that does not
 -- collide with it.
 deriveVacant :: FilePath -> FilePath
 deriveVacant = (</> "bar") . FP.takeDirectory
 
--- | Compare times forgiving minor difference.
+-- | Compare times forgiving a minor difference.
 isCloseTo :: UTCTime -> UTCTime -> Bool
 isCloseTo a b = abs (diffUTCTime a b) < 2
 
--- | Compare only some fields of 'EntryDescription' record.
+-- | Compare for equality taking into account only some fields of the
+-- 'EntryDescription' record.
 softEq :: EntryDescription -> EntryDescription -> Bool
 softEq a b =
   edCompression a == edCompression b
@@ -814,7 +815,7 @@ softEqMap n m = M.null (M.differenceWith f n m)
   where
     f a b = if softEq a b then Nothing else Just a
 
--- | Canonical representation of empty Zip archive.
+-- | The canonical representation of an empty Zip archive.
 emptyArchive :: ByteString
 emptyArchive =
   B.pack

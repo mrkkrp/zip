@@ -58,20 +58,19 @@ import qualified System.FilePath.Windows as Windows
 -- Entry selector
 
 -- | This data type serves for naming and selection of archive entries. It
--- can be created only with help of the smart constructor 'mkEntrySelector',
--- and it's the only “key” that can be used to refer to files in archive or
--- to name new archive entries.
+-- can be created only with the help of the smart constructor
+-- 'mkEntrySelector', and it's the only “key” that can be used to refer to
+-- files in the archive or to name new archive entries.
 --
 -- The abstraction is crucial for ensuring that created archives are
--- portable across operating systems, file systems, and different platforms.
--- Since on some operating systems, file paths are case-insensitive, this
--- selector is also case-insensitive. It makes sure that only relative paths
--- are used to name files inside archive, as it's recommended in the
--- specification. It also guarantees that forward slashes are used when the
--- path is stored inside archive for compatibility with Unix-like operating
--- systems (as recommended in the specification). On the other hand, in can
--- be rendered as an ordinary relative file path in OS-specific format when
--- needed.
+-- portable across operating systems, file systems, and platforms. Since on
+-- some operating systems, file paths are case-insensitive, this selector is
+-- also case-insensitive. It makes sure that only relative paths are used to
+-- name files inside archive, as it's recommended in the specification. It
+-- also guarantees that forward slashes are used when the path is stored
+-- inside the archive for compatibility with Unix-like operating systems (as
+-- recommended in the specification). On the other hand, in can be rendered
+-- as an ordinary relative file path in OS-specific format when needed.
 newtype EntrySelector = EntrySelector
   { -- | Path pieces of relative path inside archive
     unES :: NonEmpty (CI String)
@@ -116,7 +115,7 @@ mkEntrySelector path =
                 else giveup
 
 -- | Restore a relative path from 'EntrySelector'. Every 'EntrySelector'
--- corresponds to a single 'FilePath'.
+-- corresponds to a 'FilePath'.
 unEntrySelector :: EntrySelector -> FilePath
 unEntrySelector =
   FP.joinPath . fmap CI.original . NE.toList . unES
@@ -127,8 +126,7 @@ getEntryName :: EntrySelector -> Text
 getEntryName =
   T.pack . concat . NE.toList . NE.intersperse "/" . fmap CI.original . unES
 
--- | The exception represents various troubles you can have with
--- 'EntrySelector'.
+-- | The problems you can have with an 'EntrySelector'.
 newtype EntrySelectorException
   = -- | 'EntrySelector' cannot be created from this path
     InvalidEntrySelector FilePath
@@ -142,10 +140,10 @@ instance Exception EntrySelectorException
 ----------------------------------------------------------------------------
 -- Entry description
 
--- | This record represents all information about archive entry that can be
--- stored in a zip archive. It does not mirror local file header or central
--- directory file header, but their binary representations can be built
--- given this data structure and the actual archive contents.
+-- | The information about archive entry that can be stored in a zip
+-- archive. It does not mirror local file header or central directory file
+-- header, but their binary representations can be built given this data
+-- structure and the archive contents.
 data EntryDescription = EntryDescription
   { -- | Version made by
     edVersionMadeBy :: Version,
@@ -174,7 +172,7 @@ data EntryDescription = EntryDescription
   }
   deriving (Eq, Typeable)
 
--- | Supported compression methods.
+-- | The supported compression methods.
 data CompressionMethod
   = -- | Store file uncompressed
     Store
@@ -191,13 +189,13 @@ data CompressionMethod
 ----------------------------------------------------------------------------
 -- Archive description
 
--- | Information about archive as a whole.
+-- | The information about the archive as a whole.
 data ArchiveDescription = ArchiveDescription
-  { -- | Comment of entire archive
+  { -- | The comment of the entire archive
     adComment :: Maybe Text,
-    -- | Absolute offset of start of central directory
+    -- | Absolute offset of the start of central directory
     adCDOffset :: Natural,
-    -- | Size of central directory record
+    -- | The size of central directory record
     adCDSize :: Natural
   }
   deriving (Show, Read, Eq, Ord, Typeable, Data)

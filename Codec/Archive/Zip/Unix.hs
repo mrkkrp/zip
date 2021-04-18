@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- Unix specific functionality of zip archives.
+-- Unix-specific functionality of zip archives.
 --
 -- @since 1.4.0
 module Codec.Archive.Zip.Unix
