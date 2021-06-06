@@ -1,3 +1,7 @@
+## Zip 1.7.1
+
+* Fixed compilation with zstd and/or bzip2 disabled.
+
 ## Zip 1.7.0
 
 * Set user permissions on linux platform as follows: if an existing file is

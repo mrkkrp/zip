@@ -203,11 +203,12 @@ data ArchiveDescription = ArchiveDescription
 ----------------------------------------------------------------------------
 -- Exceptions
 
+{- ORMOLU_DISABLE -}
+
 -- | The bad things that can happen when you use the library.
 data ZipException
   = -- | Thrown when you try to get contents of non-existing entry
     EntryDoesNotExist FilePath EntrySelector
-  | -- | Thrown when archive structure cannot be parsed
 #ifndef ENABLE_BZIP2
     -- | Thrown when attempting to decompress a 'BZip2' entry and the
     -- library is compiled without support for it.
@@ -222,8 +223,11 @@ data ZipException
     -- @since 1.6.0
   | ZstdUnsupported
 #endif
-    ParsingFailed FilePath String
+    -- | Thrown when archive structure cannot be parsed.
+  | ParsingFailed FilePath String
   deriving (Eq, Ord, Typeable)
+
+{- ORMOLU_ENABLE -}
 
 instance Show ZipException where
   show (EntryDoesNotExist file s) =
