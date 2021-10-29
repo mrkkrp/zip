@@ -563,6 +563,8 @@ sinkEntry h s o src EditingActions {..} = do
   hSeek h AbsoluteSeek afterStreaming
   return (s, desc2)
 
+{- ORMOLU_DISABLE -}
+
 -- | Create a 'Sink' to stream data there. Once streaming is finished,
 -- return 'DataDescriptor' for the streamed data. The action /does not/
 -- close the given 'Handle'.
@@ -611,6 +613,8 @@ sinkData h compression = do
         ddCompressedSize = compressedSize,
         ddUncompressedSize = uncompressedSize
       }
+
+{- ORMOLU_ENABLE -}
 
 -- | Append central directory entries and the end of central directory
 -- record to the file that given 'Handle' is associated with. Note that this
@@ -774,12 +778,12 @@ makeZip64ExtraField ::
   Zip64ExtraField ->
   -- | Resulting representation
   ByteString
-makeZip64ExtraField c Zip64ExtraField {..} = runPut $ do
-  when (c == LocalHeader || z64efUncompressedSize >= ffffffff) $
+makeZip64ExtraField headerType Zip64ExtraField {..} = runPut $ do
+  when (headerType == LocalHeader || z64efUncompressedSize >= ffffffff) $
     putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
-  when (c == LocalHeader || z64efCompressedSize >= ffffffff) $
+  when (headerType == LocalHeader || z64efCompressedSize >= ffffffff) $
     putWord64le (fromIntegral z64efCompressedSize) -- compressed size
-  when (c == CentralDirHeader && z64efOffset >= ffffffff) $
+  when (headerType == CentralDirHeader && z64efOffset >= ffffffff) $
     putWord64le (fromIntegral z64efOffset) -- offset of local file header
 
 -- | Create 'ByteString' representing an extra field.
@@ -795,8 +799,8 @@ putCD :: Map EntrySelector EntryDescription -> Put
 putCD m = forM_ (M.keys m) $ \s ->
   putHeader CentralDirHeader s (m ! s)
 
--- | Create 'ByteString' representing a local file header if the first
--- argument is 'False' and a central directory file header otherwise.
+-- | Create 'ByteString' representing either a local file header or a
+-- central directory file header.
 putHeader ::
   -- | Type of header to generate
   HeaderType ->
@@ -805,11 +809,11 @@ putHeader ::
   -- | Description of entry
   EntryDescription ->
   Put
-putHeader c' s EntryDescription {..} = do
-  let c = c' == CentralDirHeader
-  putWord32le (bool 0x04034b50 0x02014b50 c)
+putHeader headerType s entry@EntryDescription {..} = do
+  let isCentralDirHeader = headerType == CentralDirHeader
+  putWord32le (bool 0x04034b50 0x02014b50 isCentralDirHeader)
   -- ↑ local/central file header signature
-  when c $
+  when isCentralDirHeader $
     putWord16le (fromVersion edVersionMadeBy) -- version made by
   putWord16le (fromVersion edVersionNeeded) -- version needed to extract
   let entryName = getEntryName s
@@ -830,7 +834,7 @@ putHeader c' s EntryDescription {..} = do
   putWord16le (fromIntegral $ B.length rawName) -- file name length
   let zip64ef =
         makeZip64ExtraField
-          c'
+          headerType
           Zip64ExtraField
             { z64efUncompressedSize = edUncompressedSize,
               z64efCompressedSize = edCompressedSize,
@@ -838,9 +842,11 @@ putHeader c' s EntryDescription {..} = do
             }
       extraField =
         B.take 0xffff . runPut . putExtraField $
-          M.insert 1 zip64ef edExtraField
+          if needsZip64 entry
+            then M.insert 1 zip64ef edExtraField
+            else edExtraField
   putWord16le (fromIntegral $ B.length extraField) -- extra field length
-  when c $ do
+  when isCentralDirHeader $ do
     putWord16le (fromIntegral $ B.length comment) -- file comment length
     putWord16le 0 -- disk number start
     putWord16le 0 -- internal file attributes
@@ -848,7 +854,7 @@ putHeader c' s EntryDescription {..} = do
     putWord32le (withSaturation edOffset) -- relative offset of local header
   putByteString rawName -- file name (variable size)
   putByteString extraField -- extra field (variable size)
-  when c (putByteString comment) -- file comment (variable size)
+  when isCentralDirHeader (putByteString comment) -- file comment (variable size)
 
 -- | Create 'ByteString' representing Zip64 end of central directory record.
 putZip64ECD ::

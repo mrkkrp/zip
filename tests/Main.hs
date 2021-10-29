@@ -84,6 +84,8 @@ instance Arbitrary Text where
 instance Arbitrary ByteString where
   arbitrary = B.pack <$> listOf arbitrary
 
+{- ORMOLU_DISABLE -}
+
 instance Arbitrary CompressionMethod where
   arbitrary =
     elements
@@ -96,6 +98,8 @@ instance Arbitrary CompressionMethod where
 #endif
         Deflate
       ]
+
+{- ORMOLU_ENABLE -}
 
 instance Arbitrary UTCTime where
   arbitrary =
@@ -455,13 +459,16 @@ checkEntrySpec = do
     it "does not pass the check" $ \path ->
       property $ \b s ->
         not (B.null b) ==> do
-          let r = 50 + (B.length . T.encodeUtf8 . getEntryName $ s)
-          offset <- createArchive path $ do
+          let headerLength = 30 + (B.length . T.encodeUtf8 . getEntryName $ s)
+          localFileHeaderOffset <- createArchive path $ do
             addEntry Store b s
             commit
             fromIntegral . edOffset . (! s) <$> getEntries
           withFile path ReadWriteMode $ \h -> do
-            hSeek h AbsoluteSeek (offset + fromIntegral r)
+            hSeek
+              h
+              AbsoluteSeek
+              (localFileHeaderOffset + fromIntegral headerLength)
             byte <- B.map complement <$> B.hGet h 1
             hSeek h RelativeSeek (-1)
             B.hPut h byte
