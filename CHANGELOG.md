@@ -1,3 +1,8 @@
+## Zip 1.7.2
+
+* Now the ZIP64 extra field is only written when it is necessary. Previously
+  it was written unconditionally and it confused some tools.
+
 ## Zip 1.7.1
 
 * Fixed compilation with zstd and/or bzip2 disabled.
