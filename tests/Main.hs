@@ -118,7 +118,8 @@ instance Arbitrary RelPath where
       resize 10 $
         intercalate "/"
           <$> listOf1
-            ( (++) <$> vectorOf 3 charGen
+            ( (++)
+                <$> vectorOf 3 charGen
                 <*> listOf1 charGen
             )
     case mkEntrySelector p of
@@ -196,7 +197,8 @@ binASCII = LB.toStrict . LB.toLazyByteString <$> go
 
 instance Show EntryDescription where
   show ed =
-    "{ edCompression = " ++ show (edCompression ed)
+    "{ edCompression = "
+      ++ show (edCompression ed)
       ++ "\n, edModTime = "
       ++ show (edModTime ed)
       ++ "\n, edUncompressedSize = "
@@ -411,7 +413,8 @@ sinkEntrySpec =
         info <- createArchive path $ do
           sinkEntry m (C.yield b) s
           commit
-          (,) <$> sourceEntry s (CL.foldMap id)
+          (,)
+            <$> sourceEntry s (CL.foldMap id)
             <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m)
 
