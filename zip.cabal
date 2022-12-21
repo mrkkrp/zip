@@ -97,7 +97,7 @@ library
 
     else
         cpp-options:   -DZIP_OS=3
-        build-depends: unix <2.8
+        build-depends: unix <2.9
 
 executable haskell-zip-app
     main-is:          Main.hs
