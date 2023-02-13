@@ -93,7 +93,7 @@ instance Show EntrySelector where
 --       65535 bytes
 --
 -- This function can throw an 'EntrySelectorException'.
-mkEntrySelector :: MonadThrow m => FilePath -> m EntrySelector
+mkEntrySelector :: (MonadThrow m) => FilePath -> m EntrySelector
 mkEntrySelector path =
   let f x =
         case filter (not . FP.isPathSeparator) x of

@@ -1033,7 +1033,7 @@ locateECD path h = sizeCheck
 -- Helpers
 
 -- | Rename an entry (key) in a 'Map'.
-renameKey :: Ord k => k -> k -> Map k a -> Map k a
+renameKey :: (Ord k) => k -> k -> Map k a -> Map k a
 renameKey ok nk m = case M.lookup ok m of
   Nothing -> m
   Just e -> M.insert nk e (M.delete ok m)

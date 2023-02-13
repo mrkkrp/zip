@@ -233,7 +233,7 @@ data ZipState = ZipState
 -- specified file if it already exists. See 'withArchive' if you want to
 -- work with an existing archive.
 createArchive ::
-  MonadIO m =>
+  (MonadIO m) =>
   -- | Location of the archive file to create
   FilePath ->
   -- | Actions that create the archive's content
@@ -277,7 +277,7 @@ createArchive path m = liftIO $ do
 -- design decision to make it impossible to create non-portable archives
 -- with this library.
 withArchive ::
-  MonadIO m =>
+  (MonadIO m) =>
   -- | Location of the archive to work with
   FilePath ->
   -- | Actions on that archive
