@@ -203,48 +203,29 @@ data ArchiveDescription = ArchiveDescription
 ----------------------------------------------------------------------------
 -- Exceptions
 
-{- ORMOLU_DISABLE -}
-
 -- | The bad things that can happen when you use the library.
 data ZipException
   = -- | Thrown when you try to get contents of non-existing entry
     EntryDoesNotExist FilePath EntrySelector
-#ifndef ENABLE_BZIP2
-    -- | Thrown when attempting to decompress a 'BZip2' entry and the
-    -- library is compiled without support for it.
+  | -- | Thrown when attempting to decompress an entry compressed with an
+    -- unsupported compression method or the library is compiled without
+    -- support for it.
     --
-    -- @since 1.3.0
-  | BZip2Unsupported
-#endif
-#ifndef ENABLE_ZSTD
-    -- | Thrown when attempting to decompress a 'Zstd' entry and the
-    -- library is compiled without support for it.
-    --
-    -- @since 1.6.0
-  | ZstdUnsupported
-#endif
-    -- | Thrown when archive structure cannot be parsed.
-  | ParsingFailed FilePath String
+    -- @since 2.0.0
+    UnsupportedCompressionMethod CompressionMethod
+  | -- | Thrown when archive structure cannot be parsed.
+    ParsingFailed FilePath String
   deriving (Eq, Ord, Typeable)
-
-{- ORMOLU_ENABLE -}
 
 instance Show ZipException where
   show (EntryDoesNotExist file s) =
     "No such entry found: " ++ show s ++ " in " ++ show file
   show (ParsingFailed file msg) =
     "Parsing of archive structure failed: \n" ++ msg ++ "\nin " ++ show file
-
-#ifndef ENABLE_BZIP2
-  show BZip2Unsupported =
-    "Encountered a zipfile entry with BZip2 compression, but " ++
-    "the zip library has been built with bzip2 disabled."
-#endif
-
-#ifndef ENABLE_ZSTD
-  show ZstdUnsupported =
-    "Encountered a zipfile entry with Zstd compression, but " ++
-    "the zip library has been built with zstd disabled."
-#endif
+  show (UnsupportedCompressionMethod method) =
+    "Encountered a zipfile entry with "
+      ++ show method
+      ++ " compression, but "
+      ++ "zip library does not support it or has been built without support for it."
 
 instance Exception ZipException

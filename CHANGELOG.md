@@ -1,3 +1,9 @@
+## Zip 2.0.0
+
+* Unified `BZip2Unsupported` and `ZstdUnsupported` into a single data
+  constructor `UnsupportedCompressionMethod` with a `CompressionMethod`
+  field.
+
 ## Zip 1.7.2
 
 * Now the ZIP64 extra field is only written when it is necessary. Previously

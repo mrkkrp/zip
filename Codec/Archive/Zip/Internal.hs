@@ -598,14 +598,14 @@ sinkData h compression = do
         withCompression $
           BZ.bzip2 .| dataSink
 #else
-      BZip2 -> throwM BZip2Unsupported
+      BZip2 -> throwM (UnsupportedCompressionMethod BZip2)
 #endif
 #ifdef ENABLE_ZSTD
       Zstd ->
         withCompression $
           Zstandard.compress 1 .| dataSink
 #else
-      Zstd -> throwM ZstdUnsupported
+      Zstd -> throwM (UnsupportedCompressionMethod Zstd)
 #endif
   return
     DataDescriptor
@@ -1152,13 +1152,13 @@ decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
 #ifdef ENABLE_BZIP2
 decompressingPipe BZip2 = BZ.bunzip2
 #else
-decompressingPipe BZip2 = throwM BZip2Unsupported
+decompressingPipe BZip2 = throwM (UnsupportedCompressionMethod BZip2)
 #endif
 
 #ifdef ENABLE_ZSTD
 decompressingPipe Zstd = Zstandard.decompress
 #else
-decompressingPipe Zstd = throwM ZstdUnsupported
+decompressingPipe Zstd = throwM (UnsupportedCompressionMethod Zstd)
 #endif
 
 -- | A sink that calculates the CRC32 check sum for an incoming stream.
