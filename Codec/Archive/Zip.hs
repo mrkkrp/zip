@@ -146,7 +146,7 @@ module Codec.Archive.Zip
   )
 where
 
-import qualified Codec.Archive.Zip.Internal as I
+import Codec.Archive.Zip.Internal qualified as I
 import Codec.Archive.Zip.Type
 import Conduit (PrimMonad)
 import Control.Monad
@@ -157,22 +157,22 @@ import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import Data.ByteString (ByteString)
 import Data.Conduit (ConduitT, (.|))
-import qualified Data.Conduit as C
-import qualified Data.Conduit.Binary as CB
-import qualified Data.Conduit.List as CL
-import qualified Data.DList as DList
+import Data.Conduit qualified as C
+import Data.Conduit.Binary qualified as CB
+import Data.Conduit.List qualified as CL
+import Data.DList qualified as DList
 import Data.Map.Strict (Map, (!))
-import qualified Data.Map.Strict as M
+import Data.Map.Strict qualified as M
 import Data.Sequence (Seq, (|>))
-import qualified Data.Sequence as S
-import qualified Data.Set as E
+import Data.Sequence qualified as S
+import Data.Set qualified as E
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Data.Void
 import Data.Word (Word16, Word32)
 import System.Directory
 import System.FilePath ((</>))
-import qualified System.FilePath as FP
+import System.FilePath qualified as FP
 import System.IO.Error (isDoesNotExistError)
 
 #ifndef mingw32_HOST_OS

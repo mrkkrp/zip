@@ -34,25 +34,25 @@ where
 import Control.Exception (Exception)
 import Control.Monad.Catch (MonadThrow (..))
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import Data.ByteString qualified as B
 import Data.CaseInsensitive (CI)
-import qualified Data.CaseInsensitive as CI
+import Data.CaseInsensitive qualified as CI
 import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 import Data.Version (Version)
 import Data.Word (Word16, Word32)
 import Numeric.Natural
-import qualified System.FilePath as FP
-import qualified System.FilePath.Posix as Posix
-import qualified System.FilePath.Windows as Windows
+import System.FilePath qualified as FP
+import System.FilePath.Posix qualified as Posix
+import System.FilePath.Windows qualified as Windows
 
 ----------------------------------------------------------------------------
 -- Entry selector
