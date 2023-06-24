@@ -35,26 +35,26 @@ import Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import Data.Bits
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import Data.ByteString qualified as B
 import Data.Char (ord)
 import Data.Conduit (ConduitT, ZipSink (..), (.|))
-import qualified Data.Conduit as C
-import qualified Data.Conduit.Binary as CB
-import qualified Data.Conduit.List as CL
-import qualified Data.Conduit.Zlib as Z
+import Data.Conduit qualified as C
+import Data.Conduit.Binary qualified as CB
+import Data.Conduit.List qualified as CL
+import Data.Conduit.Zlib qualified as Z
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
-import qualified Data.Map.Strict as M
+import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes, fromJust, isNothing)
 import Data.Sequence (Seq, (><), (|>))
-import qualified Data.Sequence as S
+import Data.Sequence qualified as S
 import Data.Serialize
-import qualified Data.Set as E
+import Data.Set qualified as E
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Time
 import Data.Version
 import Data.Void
