@@ -80,8 +80,8 @@ library
     if flag(dev)
         cpp-options: -DHASKELL_ZIP_DEV_MODE
         ghc-options:
-            -O0 -Wall -Werror -Wcompat -Wincomplete-record-updates
-            -Wincomplete-uni-patterns -Wnoncanonical-monad-instances
+            -Wall -Werror -Wredundant-constraints -Wpartial-fields
+            -Wunused-packages
 
     else
         ghc-options: -O2 -Wall
@@ -110,8 +110,8 @@ executable haskell-zip-app
 
     if flag(dev)
         ghc-options:
-            -Wall -Werror -Wcompat -Wincomplete-record-updates
-            -Wincomplete-uni-patterns -Wnoncanonical-monad-instances
+            -Wall -Werror -Wredundant-constraints -Wpartial-fields
+            -Wunused-packages
 
     else
         ghc-options: -O2 -Wall
@@ -129,17 +129,17 @@ test-suite tests
         containers >=0.5 && <0.7,
         directory >=1.2.2 && <1.4,
         dlist >=0.8 && <2.0,
-        exceptions >=0.6 && <0.11,
         filepath >=1.2 && <1.5,
         hspec >=2.0 && <3.0,
         temporary >=1.1 && <1.4,
         text >=0.2 && <2.1,
         time >=1.4 && <1.13,
-        transformers >=0.4 && <0.7,
         zip
 
     if flag(dev)
-        ghc-options: -O0 -Wall -Werror
+        ghc-options:
+            -Wall -Werror -Wredundant-constraints -Wpartial-fields
+            -Wunused-packages
 
     else
         ghc-options: -O2 -Wall
