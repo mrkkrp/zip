@@ -5,7 +5,7 @@ license:         BSD-3-Clause
 license-file:    LICENSE.md
 maintainer:      Mark Karpov <markkarpov92@gmail.com>
 author:          Mark Karpov <markkarpov92@gmail.com>
-tested-with:     ghc ==9.2.8 ghc ==9.4.7 ghc ==9.6.2
+tested-with:     ghc ==9.4.7 ghc ==9.6.3 ghc ==9.8.1
 homepage:        https://github.com/mrkkrp/zip
 bug-reports:     https://github.com/mrkkrp/zip/issues
 synopsis:        Operations on zip archives
@@ -51,7 +51,7 @@ library
 
     default-language: GHC2021
     build-depends:
-        base >=4.15 && <5.0,
+        base >=4.15 && <5,
         bytestring >=0.9 && <0.12,
         case-insensitive >=1.2.0.2 && <1.3,
         cereal >=0.3 && <0.6,
@@ -64,9 +64,9 @@ library
         exceptions >=0.6 && <0.11,
         filepath >=1.2 && <1.5,
         monad-control >=1.0 && <1.1,
-        mtl >=2.0 && <3.0,
+        mtl >=2 && <3,
         resourcet >=1.2 && <1.4,
-        text >=0.2 && <2.1,
+        text >=0.2 && <2.2,
         time >=1.4 && <1.13,
         transformers >=0.4 && <0.7,
         transformers-base
@@ -104,7 +104,7 @@ executable haskell-zip-app
     hs-source-dirs:   bench-app
     default-language: GHC2021
     build-depends:
-        base >=4.15 && <5.0,
+        base >=4.15 && <5,
         filepath >=1.2 && <1.5,
         zip
 
@@ -122,17 +122,17 @@ test-suite tests
     hs-source-dirs:   tests
     default-language: GHC2021
     build-depends:
-        base >=4.15 && <5.0,
-        QuickCheck >=2.4 && <3.0,
+        base >=4.15 && <5,
+        QuickCheck >=2.4 && <3,
         bytestring >=0.9 && <0.12,
         conduit >=1.3 && <1.4,
         containers >=0.5 && <0.7,
         directory >=1.2.2 && <1.4,
-        dlist >=0.8 && <2.0,
+        dlist >=0.8 && <2,
         filepath >=1.2 && <1.5,
-        hspec >=2.0 && <3.0,
+        hspec >=2 && <3,
         temporary >=1.1 && <1.4,
-        text >=0.2 && <2.1,
+        text >=0.2 && <2.2,
         time >=1.4 && <1.13,
         zip
 
