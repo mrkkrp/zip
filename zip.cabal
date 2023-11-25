@@ -44,10 +44,8 @@ library
         Codec.Archive.Zip
         Codec.Archive.Zip.CP437
         Codec.Archive.Zip.Unix
-
-    other-modules:
         Codec.Archive.Zip.Internal
-        Codec.Archive.Zip.Type
+        Codec.Archive.Zip.Internal.Type
 
     default-language: GHC2021
     build-depends:
