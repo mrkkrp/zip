@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 -- |
--- Module      :  Codec.Archive.Zip.Type
+-- Module      :  Codec.Archive.Zip.Internal.Type
 -- Copyright   :  © 2016–present Mark Karpov
 -- License     :  BSD 3 clause
 --
@@ -11,7 +11,7 @@
 -- Portability :  portable
 --
 -- Types used by the package.
-module Codec.Archive.Zip.Type
+module Codec.Archive.Zip.Internal.Type
   ( -- * Entry selector
     EntrySelector,
     mkEntrySelector,

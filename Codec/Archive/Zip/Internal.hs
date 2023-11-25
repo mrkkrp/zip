@@ -13,18 +13,10 @@
 -- Portability :  portable
 --
 -- Low-level, non-public types and operations.
-module Codec.Archive.Zip.Internal
-  ( PendingAction (..),
-    targetEntry,
-    scanArchive,
-    sourceEntry,
-    crc32Sink,
-    commit,
-  )
-where
+module Codec.Archive.Zip.Internal where
 
 import Codec.Archive.Zip.CP437 (decodeCP437)
-import Codec.Archive.Zip.Type
+import Codec.Archive.Zip.Internal.Type
 import Conduit (PrimMonad)
 import Control.Applicative (many, (<|>))
 import Control.Exception (bracketOnError, catchJust)

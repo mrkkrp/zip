@@ -147,7 +147,7 @@ module Codec.Archive.Zip
 where
 
 import Codec.Archive.Zip.Internal qualified as I
-import Codec.Archive.Zip.Type
+import Codec.Archive.Zip.Internal.Type
 import Conduit (PrimMonad)
 import Control.Monad
 import Control.Monad.Base (MonadBase (..))

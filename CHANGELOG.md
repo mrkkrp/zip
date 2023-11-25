@@ -1,3 +1,8 @@
+## Zip 2.1.0
+
+* Exposed `Codec.Archive.Zip.Internal` and `Codec.Archive.Zip.Internal.Type`
+  modules. [PR 115](https://github.com/mrkkrp/zip/pull/115).
+
 ## Zip 2.0.1
 
 * Fixed corruption of large entries when zip64 is used. [Issue
