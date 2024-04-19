@@ -1,3 +1,8 @@
+## Zip 2.0.1
+
+* Fixed corruption of large entries when zip64 is used. [Issue
+  111](https://github.com/mrkkrp/zip/issues/111).
+
 ## Zip 2.0.0
 
 * Unified `BZip2Unsupported` and `ZstdUnsupported` into a single data
