@@ -779,11 +779,16 @@ makeZip64ExtraField ::
   -- | Resulting representation
   ByteString
 makeZip64ExtraField headerType Zip64ExtraField {..} = runPut $ do
-  when (headerType == LocalHeader || z64efUncompressedSize >= ffffffff) $
-    putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
-  when (headerType == LocalHeader || z64efCompressedSize >= ffffffff) $
-    putWord64le (fromIntegral z64efCompressedSize) -- compressed size
-  when (headerType == CentralDirHeader && z64efOffset >= ffffffff) $
+  case headerType of
+    LocalHeader -> do
+      putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
+      putWord64le (fromIntegral z64efCompressedSize) -- compressed size
+    CentralDirHeader -> do
+      when (z64efUncompressedSize >= ffffffff) $
+        putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
+      when (z64efCompressedSize >= ffffffff) $
+        putWord64le (fromIntegral z64efCompressedSize) -- compressed size
+  when (z64efOffset >= ffffffff) $
     putWord64le (fromIntegral z64efOffset) -- offset of local file header
 
 -- | Create 'ByteString' representing an extra field.
@@ -810,7 +815,8 @@ putHeader ::
   EntryDescription ->
   Put
 putHeader headerType s entry@EntryDescription {..} = do
-  let isCentralDirHeader = headerType == CentralDirHeader
+  let isLocalHeader = headerType == LocalHeader
+      isCentralDirHeader = headerType == CentralDirHeader
   putWord32le (bool 0x04034b50 0x02014b50 isCentralDirHeader)
   -- ↑ local/central file header signature
   when isCentralDirHeader $
@@ -842,7 +848,7 @@ putHeader headerType s entry@EntryDescription {..} = do
             }
       extraField =
         B.take 0xffff . runPut . putExtraField $
-          if needsZip64 entry
+          if needsZip64 entry || isLocalHeader
             then M.insert 1 zip64ef edExtraField
             else edExtraField
   putWord16le (fromIntegral $ B.length extraField) -- extra field length

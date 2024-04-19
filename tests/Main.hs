@@ -462,7 +462,7 @@ checkEntrySpec = do
     it "does not pass the check" $ \path ->
       property $ \b s ->
         not (B.null b) ==> do
-          let headerLength = 30 + (B.length . T.encodeUtf8 . getEntryName $ s)
+          let headerLength = 50 + (B.length . T.encodeUtf8 . getEntryName $ s)
           localFileHeaderOffset <- createArchive path $ do
             addEntry Store b s
             commit
