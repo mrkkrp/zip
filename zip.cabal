@@ -137,6 +137,7 @@ test-suite tests
         zip
 
     if flag(dev)
+        cpp-options: -DHASKELL_ZIP_DEV_MODE
         ghc-options:
             -Wall -Werror -Wredundant-constraints -Wpartial-fields
             -Wunused-packages
