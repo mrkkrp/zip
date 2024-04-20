@@ -30,6 +30,7 @@ import Data.Text.Encoding qualified as T
 import Data.Time
 import Data.Version
 import Data.Word
+import Numeric.Natural
 import System.Directory
 import System.FilePath ((</>))
 import System.FilePath qualified as FP
@@ -38,6 +39,14 @@ import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
+
+ffffffff :: Natural
+
+#ifdef HASKELL_ZIP_DEV_MODE
+ffffffff = 250
+#else
+ffffffff = 0xffffffff
+#endif
 
 -- | Zip tests. Please note that the Zip64 feature is not currently tested
 -- automatically because we'd need > 4GB of data. Handling such quantities
@@ -82,7 +91,7 @@ instance Arbitrary Text where
   arbitrary = T.pack <$> listOf1 arbitrary
 
 instance Arbitrary ByteString where
-  arbitrary = B.pack <$> listOf arbitrary
+  arbitrary = B.pack <$> scale (* 10) (listOf arbitrary)
 
 {- ORMOLU_DISABLE -}
 
@@ -385,14 +394,19 @@ versionNeededSpec =
     -- it should be mentioned that the version also depends on Zip64 feature
     property $ \(EM s desc z) -> do
       desc' <- fromJust <$> createArchive path (z >> commit >> getEntryDesc s)
-      edVersionNeeded desc'
-        `shouldBe` makeVersion
-          ( case edCompression desc of
-              Store -> [2, 0]
-              Deflate -> [2, 0]
-              BZip2 -> [4, 6]
-              Zstd -> [6, 3]
-          )
+      let minVersionZip64 =
+            makeVersion $
+              if edUncompressedSize desc' >= ffffffff
+                || edCompressedSize desc' >= ffffffff
+                then [4, 5]
+                else [2, 0]
+          minVersionCompression = makeVersion $ case edCompression desc of
+            Store -> [2, 0]
+            Deflate -> [2, 0]
+            BZip2 -> [4, 6]
+            Zstd -> [6, 3]
+          versionNeeded = max minVersionZip64 minVersionCompression
+      edVersionNeeded desc' `shouldBe` versionNeeded
 
 addEntrySpec :: SpecWith FilePath
 addEntrySpec =
@@ -402,6 +416,7 @@ addEntrySpec =
         info <- createArchive path $ do
           addEntry m b s
           commit
+          checkEntry' s
           (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m)
 
@@ -413,6 +428,7 @@ sinkEntrySpec =
         info <- createArchive path $ do
           sinkEntry m (C.yield b) s
           commit
+          checkEntry' s
           (,)
             <$> sourceEntry s (CL.foldMap id)
             <*> (edCompression . (! s) <$> getEntries)
@@ -429,6 +445,7 @@ loadEntrySpec =
         createArchive path $ do
           loadEntry m s vpath
           commit
+          checkEntry' s
           liftIO (removeFile vpath)
           saveEntry s vpath
         B.readFile vpath `shouldReturn` b
@@ -445,6 +462,7 @@ copyEntrySpec =
         info <- createArchive path $ do
           copyEntry vpath s s
           commit
+          checkEntry' s
           (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m)
 
@@ -452,12 +470,11 @@ checkEntrySpec :: SpecWith FilePath
 checkEntrySpec = do
   context "when entry is intact" $
     it "passes the check" $ \path ->
-      property $ \m b s -> do
-        check <- createArchive path $ do
+      property $ \m b s ->
+        asIO . createArchive path $ do
           addEntry m b s
           commit
-          checkEntry s
-        check `shouldBe` True
+          checkEntry' s
   context "when entry is corrupted" $
     it "does not pass the check" $ \path ->
       property $ \b s ->
@@ -485,8 +502,10 @@ recompressSpec =
         info <- createArchive path $ do
           addEntry m b s
           commit
+          checkEntry' s
           recompress m' s
           commit
+          checkEntry' s
           (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m')
 
@@ -796,6 +815,12 @@ withSandbox :: ActionWith FilePath -> IO ()
 withSandbox action = withSystemTempDirectory "zip-sandbox" $ \dir ->
   action (dir </> "foo.zip")
 
+-- | Like 'checkEntry' but automatically aborts the test if the check fails.
+checkEntry' :: EntrySelector -> ZipArchive ()
+checkEntry' s = do
+  r <- checkEntry s
+  liftIO (if r then return () else fail "Entry integrity check failed!")
+
 -- | Given a primary name (name of archive), generate a name that does not
 -- collide with it.
 deriveVacant :: FilePath -> FilePath
@@ -875,3 +900,7 @@ listDirRecur path = DList.toList <$> go ""
               if isDir
                 then go adir'
                 else return mempty
+
+-- | Constrain the type of the argument monad to 'IO'.
+asIO :: IO a -> IO a
+asIO = id

@@ -1210,8 +1210,8 @@ fromMsDosTime MsDosTime {..} =
 ffff, ffffffff :: Natural
 
 #ifdef HASKELL_ZIP_DEV_MODE
-ffff     = 200
-ffffffff = 5000
+ffff     = 25
+ffffffff = 250
 #else
 ffff     = 0xffff
 ffffffff = 0xffffffff
