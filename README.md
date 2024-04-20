@@ -6,7 +6,7 @@
 [![Stackage LTS](http://stackage.org/package/zip/badge/lts)](http://stackage.org/lts/package/zip)
 ![CI](https://github.com/mrkkrp/zip/workflows/CI/badge.svg?branch=master)
 
-* [Why this library is written](#why-this-library-is-written)
+* [Why this library was written](#why-this-library-was-written)
     * [zip-archive](#zip-archive)
     * [LibZip](#libzip)
     * [zip-conduit](#zip-conduit)
@@ -22,13 +22,11 @@
 * [License](#license)
 
 This is a feature-rich, memory-efficient, and type-safe library to
-manipulate Zip archives. The library is the most complete and efficient
-implementation of the .ZIP specification in Haskell (at least from the
-open-sourced ones). In particular, it's created with large multimedia data
+manipulate Zip archives. The library was created with large multimedia data
 in mind and provides all features users might expect, comparable in terms of
 feature-set with libraries like `libzip` in C.
 
-## Why this library is written
+## Why this library was written
 
 There are a few libraries to work with Zip archives, yet every one of them
 provides only a subset of useful functionality or otherwise is flawed in
