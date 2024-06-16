@@ -204,22 +204,6 @@ binASCII = LB.toStrict . LB.toLazyByteString <$> go
           (1, return mempty)
         ]
 
-instance Show EntryDescription where
-  show ed =
-    "{ edCompression = "
-      ++ show (edCompression ed)
-      ++ "\n, edModTime = "
-      ++ show (edModTime ed)
-      ++ "\n, edUncompressedSize = "
-      ++ show (edUncompressedSize ed)
-      ++ "\n, edComment = "
-      ++ show (edComment ed)
-      ++ "\n, edExtraField = "
-      ++ show (edExtraField ed)
-      ++ "\n, edExtFileAttr = "
-      ++ show (edExternalFileAttrs ed)
-      ++ " }"
-
 instance Show (ZipArchive a) where
   show = const "<zip archive>"
 

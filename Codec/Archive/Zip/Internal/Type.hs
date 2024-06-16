@@ -170,7 +170,7 @@ data EntryDescription = EntryDescription
     -- @since 1.2.0
     edExternalFileAttrs :: Word32
   }
-  deriving (Eq, Typeable)
+  deriving (Eq, Typeable, Show)
 
 -- | The supported compression methods.
 data CompressionMethod
