@@ -36,7 +36,6 @@ import Data.Conduit.List qualified as CL
 import Data.Conduit.Zlib qualified as Z
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
-import Data.Foldable (foldl')
 import Data.Map.Strict (Map, (!))
 import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes, fromJust, isNothing)
@@ -67,6 +66,10 @@ import qualified Data.Conduit.BZlib as BZ
 
 #ifdef ENABLE_ZSTD
 import qualified Data.Conduit.Zstd as Zstandard
+#endif
+
+#if !MIN_VERSION_base(4,20,0)
+import Data.Foldable (foldl')
 #endif
 
 ----------------------------------------------------------------------------
