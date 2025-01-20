@@ -29,6 +29,9 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
+      - run: |
+          echo 'packages: .' > cabal.project
+          echo 'constraints: bzlib-conduit -system-bzip2' >> cabal.project
       - run: cabal update
       - run: cabal freeze $CONFIG
       - uses: actions/cache@v3.3.1
