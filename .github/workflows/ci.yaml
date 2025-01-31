@@ -18,10 +18,8 @@ jobs:
     needs: ormolu
     strategy:
       matrix:
-        cabal: ["3.10"]
+        cabal: ["3.12"]
         ghc: ["9.6.3", "9.8.4", "9.10.1"]
-    env:
-      CONFIG: "--enable-tests --enable-benchmarks --flags=dev"
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -29,11 +27,8 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
-      - run: |
-          echo 'packages: .' > cabal.project
-          echo 'constraints: bzlib-conduit -system-bzip2' >> cabal.project
       - run: cabal update
-      - run: cabal freeze $CONFIG
+      - run: cabal freeze
       - uses: actions/cache@v3.3.1
         with:
           path: |
@@ -43,7 +38,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.ghc }}-
       - run: cabal format && git diff --exit-code --color=always
-      - run: cabal build $CONFIG
-      - run: cabal test $CONFIG
-      - run: cabal haddock $CONFIG
+      - run: cabal build
+      - run: cabal test
+      - run: cabal haddock
       - run: cabal sdist
