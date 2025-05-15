@@ -36,7 +36,7 @@ import Data.Conduit.List qualified as CL
 import Data.Conduit.Zlib qualified as Z
 import Data.Digest.CRC32 (crc32Update)
 import Data.Fixed (Fixed (..))
-import Data.Map.Strict (Map, (!))
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes, fromJust, isNothing)
 import Data.Sequence (Seq, (><), (|>))
@@ -260,31 +260,29 @@ commit ::
   FilePath ->
   -- | Archive description
   ArchiveDescription ->
-  -- | Current list of entires
+  -- | Current list of entries
   Map EntrySelector EntryDescription ->
   -- | Collection of pending actions
   Seq PendingAction ->
   IO ()
 commit path ArchiveDescription {..} entries xs =
   withNewFile path $ \h -> do
-    let (ProducingActions coping sinking, editing) =
+    let (ProducingActions copying sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
         comment = predictComment adComment xs
     copiedCD <-
       M.unions
-        <$> forM
-          (M.keys coping)
-          ( \srcPath ->
-              copyEntries h srcPath (coping ! srcPath) editing
+        <$> M.traverseWithKey
+          ( \srcPath m ->
+              copyEntries h srcPath m editing
           )
-    let sinkingKeys = M.keys $ sinking `M.difference` copiedCD
+          copying
     sunkCD <-
-      M.fromList
-        <$> forM
-          sinkingKeys
-          ( \selector ->
-              sinkEntry h selector GenericOrigin (sinking ! selector) editing
-          )
+      M.traverseWithKey
+        ( \selector source ->
+            sinkEntry h selector GenericOrigin source editing
+        )
+        (sinking `M.difference` copiedCD)
     writeCD h comment (copiedCD `M.union` sunkCD)
 
 -- | Create a new file with the guarantee that in the case of an exception
@@ -455,19 +453,21 @@ copyEntries ::
   EditingActions ->
   -- | Info to generate central directory file headers later
   IO (Map EntrySelector EntryDescription)
-copyEntries h path m e = do
+copyEntries h path names editing = do
   entries <- snd <$> scanArchive path
-  done <- forM (M.keys m) $ \s ->
-    case s `M.lookup` entries of
-      Nothing -> throwM (EntryDoesNotExist path s)
-      Just desc ->
-        sinkEntry
-          h
-          (m ! s)
-          (Borrowed desc)
-          (sourceEntry path desc False)
-          e
-  return (M.fromList done)
+  M.foldlWithKey
+    ( \acc oldName newName ->
+        case M.lookup oldName entries of
+          Nothing -> throwM (EntryDoesNotExist path oldName)
+          Just oldDesc ->
+            M.insert newName
+              <$> sinkEntry h newName (Borrowed oldDesc) src editing
+              <*> acc
+            where
+              src = sourceEntry path oldDesc False
+    )
+    mempty
+    names
 
 -- | Sink an entry from the given stream into the file associated with the
 -- given 'Handle'.
@@ -483,7 +483,7 @@ sinkEntry ::
   -- | Additional info that can influence result
   EditingActions ->
   -- | Info to generate the central directory file headers later
-  IO (EntrySelector, EntryDescription)
+  IO EntryDescription
 sinkEntry h s o src EditingActions {..} = do
   currentTime <- getCurrentTime
   offset <- hTell h
@@ -556,7 +556,7 @@ sinkEntry h s o src EditingActions {..} = do
   hSeek h AbsoluteSeek offset
   B.hPut h (runPut (putHeader LocalHeader s desc2))
   hSeek h AbsoluteSeek afterStreaming
-  return (s, desc2)
+  return desc2
 
 {- ORMOLU_DISABLE -}
 
@@ -788,16 +788,15 @@ makeZip64ExtraField headerType Zip64ExtraField {..} = runPut $ do
 
 -- | Create 'ByteString' representing an extra field.
 putExtraField :: Map Word16 ByteString -> Put
-putExtraField m = forM_ (M.keys m) $ \headerId -> do
-  let b = B.take 0xffff (m ! headerId)
+putExtraField = M.foldMapWithKey $ \headerId bs -> do
+  let b = B.take 0xffff bs
   putWord16le headerId
   putWord16le (fromIntegral $ B.length b)
   putByteString b
 
 -- | Create 'ByteString' representing the entire central directory.
 putCD :: Map EntrySelector EntryDescription -> Put
-putCD m = forM_ (M.keys m) $ \s ->
-  putHeader CentralDirHeader s (m ! s)
+putCD = M.foldMapWithKey (putHeader CentralDirHeader)
 
 -- | Create 'ByteString' representing either a local file header or a
 -- central directory file header.
