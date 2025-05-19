@@ -1,3 +1,9 @@
+## Unpublished
+
+* Skip the addition of Zip64 extra fields when sufficiently short strict
+  input is provided (e.g. via `addEntry`). [Issue
+  126](https://github.com/mrkkrp/zip/issues/126).
+
 ## Zip 2.1.0
 
 * Exposed `Codec.Archive.Zip.Internal` and `Codec.Archive.Zip.Internal.Type`
