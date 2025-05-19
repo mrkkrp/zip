@@ -452,31 +452,64 @@ copyEntrySpec =
 
 checkEntrySpec :: SpecWith FilePath
 checkEntrySpec = do
-  context "when entry is intact" $
-    it "passes the check" $ \path ->
-      property $ \m b s ->
-        asIO . createArchive path $ do
-          addEntry m b s
-          commit
-          checkEntry' s
-  context "when entry is corrupted" $
-    it "does not pass the check" $ \path ->
-      property $ \b s ->
-        not (B.null b) ==> do
-          let headerLength = 50 + (B.length . T.encodeUtf8 . getEntryName $ s)
-          localFileHeaderOffset <- createArchive path $ do
-            addEntry Store b s
+  context "for entries added via addEntry" $ do
+    context "when entry is intact" $
+      it "passes the check" $ \path ->
+        property $ \m b s ->
+          asIO . createArchive path $ do
+            addEntry m b s
             commit
-            fromIntegral . edOffset . (! s) <$> getEntries
-          withFile path ReadWriteMode $ \h -> do
-            hSeek
-              h
-              AbsoluteSeek
-              (localFileHeaderOffset + fromIntegral headerLength)
-            byte <- B.map complement <$> B.hGet h 1
-            hSeek h RelativeSeek (-1)
-            B.hPut h byte
-          withArchive path (checkEntry s) `shouldReturn` False
+            checkEntry' s
+    context "when entry is corrupted" $
+      it "does not pass the check" $ \path ->
+        property $ \b s ->
+          not (B.null b) ==> do
+            let nameLength = B.length . T.encodeUtf8 . getEntryName $ s
+                zip64Length =
+                  if fromIntegral (B.length b) >= ffffffff
+                    then 20
+                    else 0
+                headerLength = 30 + nameLength + zip64Length
+            localFileHeaderOffset <- createArchive path $ do
+              addEntry Store b s
+              commit
+              fromIntegral . edOffset . (! s) <$> getEntries
+            withFile path ReadWriteMode $ \h -> do
+              hSeek
+                h
+                AbsoluteSeek
+                (localFileHeaderOffset + fromIntegral headerLength)
+              byte <- B.map complement <$> B.hGet h 1
+              hSeek h RelativeSeek (-1)
+              B.hPut h byte
+            withArchive path (checkEntry s) `shouldReturn` False
+  context "for entries added via sinkEntry" $ do
+    context "when entry is intact" $
+      it "passes the check" $ \path ->
+        property $ \m b s ->
+          asIO . createArchive path $ do
+            sinkEntry m (C.yield b) s
+            commit
+            checkEntry' s
+    context "when entry is corrupted" $
+      it "does not pass the check" $ \path ->
+        property $ \b s ->
+          not (B.null b) ==> do
+            let nameLength = B.length . T.encodeUtf8 . getEntryName $ s
+                headerLength = 50 + nameLength
+            localFileHeaderOffset <- createArchive path $ do
+              sinkEntry Store (C.yield b) s
+              commit
+              fromIntegral . edOffset . (! s) <$> getEntries
+            withFile path ReadWriteMode $ \h -> do
+              hSeek
+                h
+                AbsoluteSeek
+                (localFileHeaderOffset + fromIntegral headerLength)
+              byte <- B.map complement <$> B.hGet h 1
+              hSeek h RelativeSeek (-1)
+              B.hPut h byte
+            withArchive path (checkEntry s) `shouldReturn` False
 
 recompressSpec :: SpecWith FilePath
 recompressSpec =

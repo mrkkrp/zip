@@ -431,7 +431,7 @@ addEntry ::
   -- | Name of the entry to add
   EntrySelector ->
   ZipArchive ()
-addEntry t b s = addPending (I.SinkEntry t (C.yield b) s)
+addEntry t b s = addPending (I.StrictEntry t b s)
 
 -- | Stream data from the specified source to an archive entry.
 sinkEntry ::
