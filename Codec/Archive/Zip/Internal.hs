@@ -495,9 +495,7 @@ sinkEntry h s o src EditingActions {..} = do
       modTime = case o of
         GenericOrigin -> currentTime
         Borrowed ed -> edModTime ed
-      extFileAttr = case o of
-        GenericOrigin -> M.findWithDefault defaultFileMode s eaExtFileAttr
-        Borrowed _ -> M.findWithDefault defaultFileMode s eaExtFileAttr
+      extFileAttr = M.findWithDefault defaultFileMode s eaExtFileAttr
       oldExtraFields = case o of
         GenericOrigin -> M.empty
         Borrowed ed -> edExtraField ed
