@@ -1,4 +1,4 @@
-## Unpublished
+## Zip 2.2.0
 
 * Skip the addition of Zip64 extra fields when sufficiently short strict
   input is provided (e.g. via `addEntry`). [Issue
