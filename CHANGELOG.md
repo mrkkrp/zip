@@ -1,3 +1,9 @@
+## Unpublished
+
+* Don't add Zip64 fields when copying entries from another archive
+  unless the source entry has them. [PR
+  128](https://github.com/mrkkrp/zip/pull/128).
+
 ## Zip 2.2.0
 
 * Skip the addition of Zip64 extra fields when sufficiently short strict
