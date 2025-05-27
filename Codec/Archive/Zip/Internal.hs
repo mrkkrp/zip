@@ -85,7 +85,7 @@ data PendingAction
       EntrySelector
   | -- | Add an entry given its content as a string ByteString.
     StrictEntry CompressionMethod ByteString EntrySelector
-  | -- | Copy an entry form another archive without re-compression
+  | -- | Copy an entry from another archive without re-compression
     CopyEntry FilePath EntrySelector EntrySelector
   | -- | Change the name of the entry inside archive
     RenameEntry EntrySelector EntrySelector
@@ -854,7 +854,8 @@ putHeader headerType s entry@EntryDescription {..} = do
       appendZip64 =
         case headerType of
           LocalHeader (StrictOrigin size) -> size >= ffffffff
-          LocalHeader _ -> True
+          LocalHeader (Borrowed ed) -> entryUsesZip64 ed
+          LocalHeader GenericOrigin -> True
           CentralDirHeader -> needsZip64 entry
       extraField =
         B.take 0xffff . runPut . putExtraField $
@@ -1143,6 +1144,10 @@ needsZip64 EntryDescription {..} =
   any
     (>= ffffffff)
     [edOffset, edCompressedSize, edUncompressedSize]
+
+-- | Check if an entry has Zip64 extra fields.
+entryUsesZip64 :: EntryDescription -> Bool
+entryUsesZip64 EntryDescription {..} = M.member 1 edExtraField
 
 -- | Determine “version needed to extract” that should be written to the
 -- headers given the need of the Zip64 feature and the compression method.
