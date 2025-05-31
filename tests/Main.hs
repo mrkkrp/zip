@@ -394,7 +394,7 @@ versionNeededSpec =
 
 addEntrySpec :: SpecWith FilePath
 addEntrySpec =
-  context "when an entry is added" $
+  context "when an entry is added" $ do
     it "is there" $ \path ->
       property $ \m b s -> do
         info <- createArchive path $ do
@@ -403,6 +403,12 @@ addEntrySpec =
           checkEntry' s
           (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m)
+    it "does not add unnecessary zip64 extra fields" $ \path -> do
+      property $ \b s ->
+        fromIntegral (B.length b) < ffffffff ==> do
+          createArchive path (addEntry Store b s)
+          bytes <- B.drop (30 + rawSelectorLength s) <$> B.readFile path
+          bytes `shouldSatisfy` B.isPrefixOf b
 
 sinkEntrySpec :: SpecWith FilePath
 sinkEntrySpec =
@@ -438,7 +444,7 @@ loadEntrySpec =
 
 copyEntrySpec :: SpecWith FilePath
 copyEntrySpec =
-  context "when entry is copied form another archive" $
+  context "when entry is copied from another archive" $ do
     it "is there" $ \path ->
       property $ \m b s -> do
         let vpath = deriveVacant path
@@ -449,6 +455,14 @@ copyEntrySpec =
           checkEntry' s
           (,) <$> getEntry s <*> (edCompression . (! s) <$> getEntries)
         info `shouldBe` (b, m)
+    it "does not add unnecessary zip64 extra fields" $ \path -> do
+      property $ \b s ->
+        fromIntegral (B.length b) < ffffffff ==> do
+          let vpath = deriveVacant path
+          createArchive vpath $ addEntry Store b s
+          createArchive path $ copyEntry vpath s s
+          bytes <- B.drop (30 + rawSelectorLength s) <$> B.readFile path
+          bytes `shouldSatisfy` B.isPrefixOf b
 
 checkEntrySpec :: SpecWith FilePath
 checkEntrySpec = do
@@ -464,12 +478,11 @@ checkEntrySpec = do
       it "does not pass the check" $ \path ->
         property $ \b s ->
           not (B.null b) ==> do
-            let nameLength = B.length . T.encodeUtf8 . getEntryName $ s
-                zip64Length =
+            let zip64Length =
                   if fromIntegral (B.length b) >= ffffffff
                     then 20
                     else 0
-                headerLength = 30 + nameLength + zip64Length
+                headerLength = 30 + rawSelectorLength s + zip64Length
             localFileHeaderOffset <- createArchive path $ do
               addEntry Store b s
               commit
@@ -495,8 +508,7 @@ checkEntrySpec = do
       it "does not pass the check" $ \path ->
         property $ \b s ->
           not (B.null b) ==> do
-            let nameLength = B.length . T.encodeUtf8 . getEntryName $ s
-                headerLength = 50 + nameLength
+            let headerLength = 50 + rawSelectorLength s
             localFileHeaderOffset <- createArchive path $ do
               sinkEntry Store (C.yield b) s
               commit
@@ -921,3 +933,7 @@ listDirRecur path = DList.toList <$> go ""
 -- | Constrain the type of the argument monad to 'IO'.
 asIO :: IO a -> IO a
 asIO = id
+
+-- | Get the length in bytes of an encoded 'EntrySelector'.
+rawSelectorLength :: EntrySelector -> Int
+rawSelectorLength = B.length . T.encodeUtf8 . getEntryName
