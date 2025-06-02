@@ -1,4 +1,4 @@
-## Unpublished
+## Zip 2.2.1
 
 * Don't add Zip64 fields when copying entries from another archive
   unless the source entry has them. [PR
