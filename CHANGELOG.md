@@ -1,3 +1,8 @@
+## Unreleased
+
+* Make `sourceEntry` close file handles promptly. [Issue
+  142](https://github.com/mrkkrp/zip/issues/142).
+
 ## Zip 2.2.1
 
 * Don't add Zip64 fields when copying entries from another archive
