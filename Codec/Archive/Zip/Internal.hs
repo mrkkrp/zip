@@ -238,18 +238,29 @@ sourceEntry ::
   Bool ->
   -- | Source of uncompressed data
   ConduitT () ByteString m ()
-sourceEntry path EntryDescription {..} d =
-  source .| CB.isolate (fromIntegral edCompressedSize) .| decompress
+sourceEntry path (EntryDescription {..}) d =
+  -- We cannot simply use CB.sourceIOHandle
+  -- because that closes the archive only when its end is reached.
+  -- See <https://github.com/mrkkrp/zip/issues/142>.
+  -- The following implementation closes file handles promptly.
+  C.bracketP
+    ( do
+        h <- openBinaryFile path ReadMode
+        hSeek h AbsoluteSeek (fromIntegral edOffset)
+        localHeader <- B.hGet h 30
+        case runGet getLocalHeaderGap localHeader of
+          Left msg -> throwM (ParsingFailed path msg)
+          Right gap -> do
+            hSeek h RelativeSeek gap
+            return h
+    )
+    hClose
+    ( \h ->
+        CB.sourceHandle h
+          .| CB.isolate (fromIntegral edCompressedSize)
+          .| decompress
+    )
   where
-    source = CB.sourceIOHandle $ do
-      h <- openFile path ReadMode
-      hSeek h AbsoluteSeek (fromIntegral edOffset)
-      localHeader <- B.hGet h 30
-      case runGet getLocalHeaderGap localHeader of
-        Left msg -> throwM (ParsingFailed path msg)
-        Right gap -> do
-          hSeek h RelativeSeek gap
-          return h
     decompress =
       if d
         then decompressingPipe edCompression
