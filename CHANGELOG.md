@@ -1,4 +1,4 @@
-## Unreleased
+## Zip 2.2.2
 
 * Make `sourceEntry` close file handles promptly. [Issue
   142](https://github.com/mrkkrp/zip/issues/142).
