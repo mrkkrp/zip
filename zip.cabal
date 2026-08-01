@@ -79,7 +79,7 @@ library
         cpp-options: -DHASKELL_ZIP_DEV_MODE
         ghc-options:
             -Wall -Werror -Wredundant-constraints -Wpartial-fields
-            -Wunused-packages
+            -Wunused-packages -haddock -Winvalid-haddock
 
     else
         ghc-options: -O2 -Wall
@@ -109,7 +109,7 @@ executable haskell-zip-app
     if flag(dev)
         ghc-options:
             -Wall -Werror -Wredundant-constraints -Wpartial-fields
-            -Wunused-packages
+            -Wunused-packages -haddock -Winvalid-haddock
 
     else
         ghc-options: -O2 -Wall
@@ -138,7 +138,7 @@ test-suite tests
         cpp-options: -DHASKELL_ZIP_DEV_MODE
         ghc-options:
             -Wall -Werror -Wredundant-constraints -Wpartial-fields
-            -Wunused-packages
+            -Wunused-packages -haddock -Winvalid-haddock
 
     else
         ghc-options: -O2 -Wall
