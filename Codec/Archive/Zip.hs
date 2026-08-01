@@ -27,7 +27,7 @@
 -- directories/ to your archive. This approach is used in Git, and I find it
 -- sane.
 --
--- Finally, the third feature of the library is that it does not modify
+-- Finally, the third feature of the library is that it does not modify the
 -- archive instantly, because doing so on every manipulation would often be
 -- inefficient. Instead, we maintain a collection of pending actions that
 -- can be turned into an optimized procedure that efficiently modifies the
@@ -305,8 +305,8 @@ withArchive path m = liftIO $ do
 -- archive happens only once.
 --
 -- Please note that the returned value only reflects the current contents of
--- the archive in file system, non-committed actions are not reflected, see
--- 'commit' for more information.
+-- the archive in the file system; non-committed actions are not reflected,
+-- see 'commit' for more information.
 getEntries :: ZipArchive (Map EntrySelector EntryDescription)
 getEntries = ZipArchive (gets zsEntries)
 
@@ -353,7 +353,7 @@ getEntrySource s = do
     Nothing -> throwM (EntryDoesNotExist path s)
     Just desc -> return (I.sourceEntry path desc True)
 
--- | Stream contents of an archive entry to the given 'Sink'.
+-- | Stream the contents of an archive entry to the given 'Sink'.
 --
 -- Throws: 'EntryDoesNotExist'.
 sourceEntry ::
@@ -472,14 +472,14 @@ copyEntry ::
   FilePath ->
   -- | Name of the entry (in the source archive) to copy
   EntrySelector ->
-  -- | Name of the entry to insert (in current archive)
+  -- | Name of the entry to insert (in the current archive)
   EntrySelector ->
   ZipArchive ()
 copyEntry path s' s = do
   apath <- liftIO (canonicalizePath path)
   addPending (I.CopyEntry apath s' s)
 
--- | Add an directory to the archive. Please note that due to the design of
+-- | Add a directory to the archive. Please note that due to the design of
 -- the library, empty sub-directories will not be added.
 --
 -- The action can throw 'InvalidEntrySelector'.
@@ -526,12 +526,12 @@ renameEntry ::
   ZipArchive ()
 renameEntry old new = addPending (I.RenameEntry old new)
 
--- | Delete an entry from the archive, if it does not exist, nothing will
+-- | Delete an entry from the archive. If it does not exist, nothing will
 -- happen.
 deleteEntry :: EntrySelector -> ZipArchive ()
 deleteEntry s = addPending (I.DeleteEntry s)
 
--- | Change compression method of an entry, if it does not exist, nothing
+-- | Change the compression method of an entry. If it does not exist, nothing
 -- will happen.
 recompress ::
   -- | The new compression method
@@ -541,9 +541,9 @@ recompress ::
   ZipArchive ()
 recompress t s = addPending (I.Recompress t s)
 
--- | Set an entry comment, if that entry does not exist, nothing will
--- happen. Note that if binary representation of the comment is longer than
--- 65535 bytes, it will be truncated on writing.
+-- | Set an entry comment. If that entry does not exist, nothing will happen.
+-- Note that if the binary representation of the comment is longer than 65535
+-- bytes, it will be truncated on writing.
 setEntryComment ::
   -- | Text of the comment
   Text ->
@@ -552,7 +552,7 @@ setEntryComment ::
   ZipArchive ()
 setEntryComment text s = addPending (I.SetEntryComment text s)
 
--- | Delete an entry's comment, if that entry does not exist, nothing will
+-- | Delete an entry's comment. If that entry does not exist, nothing will
 -- happen.
 deleteEntryComment :: EntrySelector -> ZipArchive ()
 deleteEntryComment s = addPending (I.DeleteEntryComment s)

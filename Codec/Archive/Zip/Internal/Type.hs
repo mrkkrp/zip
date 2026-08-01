@@ -65,13 +65,13 @@ import System.FilePath.Windows qualified as Windows
 -- portable across operating systems, file systems, and platforms. Since on
 -- some operating systems, file paths are case-insensitive, this selector is
 -- also case-insensitive. It makes sure that only relative paths are used to
--- name files inside archive, as it's recommended in the specification. It
+-- name files inside the archive, as recommended in the specification. It
 -- also guarantees that forward slashes are used when the path is stored
 -- inside the archive for compatibility with Unix-like operating systems (as
--- recommended in the specification). On the other hand, in can be rendered
+-- recommended in the specification). On the other hand, it can be rendered
 -- as an ordinary relative file path in OS-specific format when needed.
 newtype EntrySelector = EntrySelector
-  { -- | Path pieces of relative path inside archive
+  { -- | Path pieces of the relative path inside the archive
     unES :: NonEmpty (CI String)
   }
   deriving (Eq, Ord)
@@ -87,9 +87,9 @@ instance Show EntrySelector where
 --
 --     * 'System.FilePath.Posix.isValid'
 --     * 'System.FilePath.Windows.isValid'
---     * it is a relative path without slash at the end
---     * binary representations of normalized path should be not longer than
---       65535 bytes
+--     * it is a relative path without a slash at the end
+--     * the binary representation of the normalized path should be no longer
+--       than 65535 bytes
 --
 -- This function can throw an 'EntrySelectorException'.
 mkEntrySelector :: (MonadThrow m) => FilePath -> m EntrySelector
@@ -119,7 +119,7 @@ unEntrySelector :: EntrySelector -> FilePath
 unEntrySelector =
   FP.joinPath . fmap CI.original . NE.toList . unES
 
--- | Get an entry name in the from that is suitable for writing to file
+-- | Get an entry name in the form that is suitable for writing to a file
 -- header, given an 'EntrySelector'.
 getEntryName :: EntrySelector -> Text
 getEntryName =
@@ -139,9 +139,9 @@ instance Exception EntrySelectorException
 ----------------------------------------------------------------------------
 -- Entry description
 
--- | The information about archive entry that can be stored in a zip
--- archive. It does not mirror local file header or central directory file
--- header, but their binary representations can be built given this data
+-- | The information about an archive entry that can be stored in a zip
+-- archive. It does not mirror the local file header or the central directory
+-- file header, but their binary representations can be built given this data
 -- structure and the archive contents.
 data EntryDescription = EntryDescription
   { -- | Version made by
@@ -204,7 +204,7 @@ data ArchiveDescription = ArchiveDescription
 
 -- | The bad things that can happen when you use the library.
 data ZipException
-  = -- | Thrown when you try to get contents of non-existing entry
+  = -- | Thrown when you try to get the contents of a non-existing entry
     EntryDoesNotExist FilePath EntrySelector
   | -- | Thrown when attempting to decompress an entry compressed with an
     -- unsupported compression method or the library is compiled without

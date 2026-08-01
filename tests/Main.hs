@@ -308,9 +308,9 @@ withArchiveSpec = do
   context "when called with occupied path (empty archive)" $
     it "does not overwrite the file unnecessarily" $ \path -> do
       B.writeFile path emptyArchive
-      withArchive path $
-        liftIO $
-          B.writeFile path B.empty
+      withArchive path
+        $ liftIO
+        $ B.writeFile path B.empty
       B.readFile path `shouldNotReturn` emptyArchive
 
 archiveCommentSpec :: SpecWith FilePath

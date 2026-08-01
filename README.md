@@ -37,13 +37,13 @@ package.
 ### zip-archive
 
 `zip-archive` is a widely used library. It's quite old, well-known and
-simple to use. However, it creates Zip archives purely, as `ByteStrings`s in
+simple to use. However, it creates Zip archives purely, as `ByteString`s in
 memory. This is not acceptable if you work with big data. For example, if
-you have a collection of files with the total size 500 MB and you want to
+you have a collection of files with a total size of 500 MB and you want to
 pack them into an archive, you can easily consume up to 1 GB of memory (the
 files plus the resulting archive). This is not always affordable. Even if
-you want just to look at the list of archive entries it will read the entire
-archive into memory.
+you just want to look at the list of archive entries, it will read the
+entire archive into memory.
 
 ### LibZip
 
@@ -65,18 +65,18 @@ and libraries on Ubuntu are always ancient. This means that I cannot use the
 version of the library from Stackage, and I don't yet know what will be on
 the server.
 
-After much frustration, I decided to avoid using `LibZip`. After all, this
-is not a project that shouldn't be done completely in Haskell. By rewriting
-this in Haskell, I also can make it safer to use.
+After much frustration, I decided to avoid using `LibZip`. After all, there
+is no reason this project shouldn't be done completely in Haskell. By
+rewriting it in Haskell, I can also make it safer to use.
 
 ### zip-conduit
 
 This one uses the right approach: leverage a good streaming library
-(`conduit`) for memory-efficient processing. The library is however not
-feature-rich and has certain problems (including the programming style, it
-uses `error` if an entry is missing in the archive, among other things),
-some of them are reported on its issue tracker. It also does not appear to
-be maintained (the last sign of activity was on December 23, 2014).
+(`conduit`) for memory-efficient processing. The library is, however, not
+feature-rich and has certain problems (including the programming style—for
+example, it uses `error` when an entry is missing in the archive), some of
+which are reported on its issue tracker. It also does not appear to be
+maintained (the last sign of activity was on December 23, 2014).
 
 ## Features
 
@@ -102,11 +102,11 @@ Hackage at the moment.
 
 ### Encryption
 
-Encryption is currently not supported. Encryption system described in the
-.ZIP specification is known to be seriously flawed, so it's probably not the
-best way to protect your data anyway. The encryption method seems to be a
-proprietary technology of PKWARE (at least that's what stated about it in
-the .ZIP specification), so to hell with it.
+Encryption is currently not supported. The encryption system described in
+the .ZIP specification is known to be seriously flawed, so it's probably not
+the best way to protect your data anyway. The encryption method seems to be
+a proprietary technology of PKWARE (at least that's what is stated about it
+in the .ZIP specification), so to hell with it.
 
 ### Sources of file data
 
@@ -131,12 +131,12 @@ when:
 * There are more than 65535 entries in the archive.
 
 The library is particularly well suited for processing large files. For
-example, I've been able to create 6.5 GB archive with reasonable speed and
+example, I've been able to create a 6.5 GB archive with reasonable speed and
 without significant memory consumption.
 
 ### Filenames
 
-The library has an API that makes it impossible to create archive with
+The library has an API that makes it impossible to create an archive with
 non-portable or invalid file names in it.
 
 As of .ZIP specification 6.3.2, files with Unicode symbols in their names
@@ -249,14 +249,14 @@ It's also possible to:
 
 * rename an entry with `renameEntry`
 * delete an entry with `deleteEntry`
-* change compression method with `recompress`
-* change comment associated with an entry with `setEntryComment`
-* delete comment with `deleteEntryComment`
-* set modification time with `setModTime`
+* change the compression method with `recompress`
+* change the comment associated with an entry with `setEntryComment`
+* delete a comment with `deleteEntryComment`
+* set the modification time with `setModTime`
 * manipulate extra fields with `addExtraField` and `deleteExtraField`
-* check if entry is intact with `checkEntry`
-* undo changes with `undoEntryCanges`, `undoArchiveChanges`, and `undoAll`
-* force changes to be written to file system with `commit`
+* check if an entry is intact with `checkEntry`
+* undo changes with `undoEntryChanges`, `undoArchiveChanges`, and `undoAll`
+* force changes to be written to the file system with `commit`
 
 This should cover all your needs. Feel free to open an issue if you're
 missing something.
@@ -272,7 +272,7 @@ Pull requests are welcome.
 
 Copyright © 2016–present Mark Karpov
 
-Distributed under BSD 3 clause license.
+Distributed under the BSD 3-clause license.
 
 [libzip]: https://en.wikipedia.org/wiki/Libzip
 [specification]: https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.3.TXT

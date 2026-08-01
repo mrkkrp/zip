@@ -83,25 +83,25 @@ data PendingAction
       CompressionMethod
       (ConduitT () ByteString (ResourceT IO) ())
       EntrySelector
-  | -- | Add an entry given its content as a string ByteString.
+  | -- | Add an entry given its content as a strict 'ByteString'.
     StrictEntry CompressionMethod ByteString EntrySelector
   | -- | Copy an entry from another archive without re-compression
     CopyEntry FilePath EntrySelector EntrySelector
-  | -- | Change the name of the entry inside archive
+  | -- | Change the name of the entry inside the archive
     RenameEntry EntrySelector EntrySelector
-  | -- | Delete an entry from archive
+  | -- | Delete an entry from the archive
     DeleteEntry EntrySelector
   | -- | Change the compression method on an entry
     Recompress CompressionMethod EntrySelector
   | -- | Set the comment for a particular entry
     SetEntryComment Text EntrySelector
-  | -- | Delete theh comment of a particular entry
+  | -- | Delete the comment of a particular entry
     DeleteEntryComment EntrySelector
   | -- | Set the modification time of a particular entry
     SetModTime UTCTime EntrySelector
   | -- | Add an extra field to the specified entry
     AddExtraField Word16 ByteString EntrySelector
-  | -- | Delete an extra filed of the specified entry
+  | -- | Delete an extra field of the specified entry
     DeleteExtraField Word16 EntrySelector
   | -- | Set the comment for the entire archive
     SetArchiveComment Text
@@ -129,7 +129,7 @@ data EditingActions = EditingActions
     eaExtFileAttr :: Map EntrySelector Word32
   }
 
--- | The origin of entries that can be streamed into archive.
+-- | The origin of entries that can be streamed into the archive.
 data EntryOrigin
   = GenericOrigin
   | StrictOrigin Natural -- uncompressed length
@@ -225,9 +225,9 @@ scanArchive path = withBinaryFile path ReadMode $ \h -> do
     Nothing ->
       throwM (ParsingFailed path "Cannot locate end of central directory")
 
--- | Given location of the archive and information about a specific archive
--- entry 'EntryDescription', return 'Source' of its data. The actual data
--- can be compressed or uncompressed depending on the third argument.
+-- | Given the location of the archive and information about a specific
+-- archive entry 'EntryDescription', return 'Source' of its data. The actual
+-- data can be compressed or uncompressed depending on the third argument.
 sourceEntry ::
   (PrimMonad m, MonadThrow m, MonadResource m) =>
   -- | Path to archive that contains the entry
@@ -320,12 +320,12 @@ withNewFile fpath action =
       hClose h
       -- Despite using `bracketOnError` the file is not guaranteed to exist
       -- here since we could be interrupted with an async exception after
-      -- the file has been renamed. Therefore, we silentely ignore
+      -- the file has been renamed. Therefore, we silently ignore
       -- `DoesNotExistError`.
       catchJust (guard . isDoesNotExistError) (removeFile path) (const $ pure ())
 
--- | Determine what comment in new archive will look like given its original
--- value and a collection of pending actions.
+-- | Determine what the comment in the new archive will look like given its
+-- original value and a collection of pending actions.
 predictComment :: Maybe Text -> Seq PendingAction -> Maybe Text
 predictComment original xs =
   case S.index xs <$> S.findIndexR (isNothing . targetEntry) xs of
@@ -335,11 +335,11 @@ predictComment original xs =
     Just _ -> Nothing
 
 -- | Transform a map representing existing entries into a collection of
--- actions that re-create those entires.
+-- actions that re-create those entries.
 toRecreatingActions ::
-  -- | Name of the archive file where entires are found
+  -- | Name of the archive file where entries are found
   FilePath ->
-  -- | Actual list of entires
+  -- | Actual list of entries
   Map EntrySelector EntryDescription ->
   -- | Actions that recreate the archive entries
   Seq PendingAction
@@ -348,7 +348,7 @@ toRecreatingActions path entries = E.foldl' f S.empty (M.keysSet entries)
     f s e = s |> CopyEntry path e e
 
 -- | Transform a collection of 'PendingAction's into 'ProducingActions' and
--- 'EditingActions'—data that describes how to create resulting archive.
+-- 'EditingActions'—data that describes how to create the resulting archive.
 optimize ::
   -- | Collection of pending actions
   Seq PendingAction ->
@@ -665,8 +665,8 @@ writeCD h comment m = do
 ----------------------------------------------------------------------------
 -- Binary serialization
 
--- | Extract the number of bytes between the start of file name in local
--- header and the start of actual data.
+-- | Extract the number of bytes between the start of the file name in the
+-- local header and the start of the actual data.
 getLocalHeaderGap :: Get Integer
 getLocalHeaderGap = do
   getSignature 0x04034b50
@@ -686,8 +686,8 @@ getLocalHeaderGap = do
 getCD :: Get (Map EntrySelector EntryDescription)
 getCD = M.fromList . catMaybes <$> many getCDHeader
 
--- | Parse a single central directory file header. If it's a directory or
--- file compressed with unsupported compression method, 'Nothing' is
+-- | Parse a single central directory file header. If it's a directory or a
+-- file compressed with an unsupported compression method, 'Nothing' is
 -- returned.
 getCDHeader :: Get (Maybe (EntrySelector, EntryDescription))
 getCDHeader = do
@@ -1094,12 +1094,12 @@ targetEntry (SetArchiveComment _) = Nothing
 targetEntry DeleteArchiveComment = Nothing
 
 -- | Decode a 'ByteString'. The first argument indicates whether we should
--- treat it as UTF-8 (in case bit 11 of general-purpose bit flag is set),
+-- treat it as UTF-8 (in case bit 11 of the general-purpose bit flag is set),
 -- otherwise the function assumes CP437. Note that since not every stream of
 -- bytes constitutes valid UTF-8 text, this function can fail. In that case
 -- 'Nothing' is returned.
 decodeText ::
-  -- | Whether bit 11 of general-purpose bit flag is set
+  -- | Whether bit 11 of the general-purpose bit flag is set
   Bool ->
   -- | Binary data to decode
   ByteString ->
@@ -1122,7 +1122,7 @@ toVersion x = makeVersion [major, minor]
   where
     (major, minor) = quotRem (fromIntegral $ x .&. 0x00ff) 10
 
--- | Covert 'Version' to its numeric representation as per the .ZIP
+-- | Convert 'Version' to its numeric representation as per the .ZIP
 -- specification.
 fromVersion :: Version -> Word16
 fromVersion v = fromIntegral ((ZIP_OS `shiftL` 8) .|. (major * 10 + minor))
@@ -1133,7 +1133,7 @@ fromVersion v = fromIntegral ((ZIP_OS `shiftL` 8) .|. (major * 10 + minor))
         v0 : _ -> (v0, 0)
         [] -> (0, 0)
 
--- | Get the compression method form its numeric representation.
+-- | Get the compression method from its numeric representation.
 toCompressionMethod :: Word16 -> Maybe CompressionMethod
 toCompressionMethod 0 = Just Store
 toCompressionMethod 8 = Just Deflate

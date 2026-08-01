@@ -20,7 +20,7 @@ import Data.Bits
 import Data.Word
 import System.Posix.Types (CMode (..))
 
--- | Convert external attributes to the file info.
+-- | Convert external attributes to the file mode.
 --
 -- >>> toFileMode 2179792896
 -- 0o0755
@@ -29,7 +29,7 @@ import System.Posix.Types (CMode (..))
 toFileMode :: Word32 -> CMode
 toFileMode attrs = fromIntegral $ (attrs `shiftR` 16) .&. 0x0fff
 
--- | Convert external attributes to the file info. The function assumes a
+-- | Convert the file mode to external attributes. The function assumes a
 -- regular file and keeps DOS attributes untouched.
 --
 -- >>> fromFileMode 0o0755
