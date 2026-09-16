@@ -174,10 +174,9 @@ import System.Directory
 import System.FilePath ((</>))
 import System.FilePath qualified as FP
 import System.IO.Error (isDoesNotExistError)
-
 #ifndef mingw32_HOST_OS
-import qualified Codec.Archive.Zip.Unix as Unix
-import qualified System.Posix as Unix
+import Codec.Archive.Zip.Unix qualified as Unix
+import System.Posix qualified as Unix
 #endif
 
 ----------------------------------------------------------------------------

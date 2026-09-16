@@ -41,7 +41,6 @@ import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
 
 ffffffff :: Natural
-
 #ifdef HASKELL_ZIP_DEV_MODE
 ffffffff = 250
 #else
@@ -93,8 +92,6 @@ instance Arbitrary Text where
 instance Arbitrary ByteString where
   arbitrary = B.pack <$> scale (* 10) (listOf arbitrary)
 
-{- ORMOLU_DISABLE -}
-
 instance Arbitrary CompressionMethod where
   arbitrary =
     elements
@@ -107,8 +104,6 @@ instance Arbitrary CompressionMethod where
 #endif
         Deflate
       ]
-
-{- ORMOLU_ENABLE -}
 
 instance Arbitrary UTCTime where
   arbitrary =

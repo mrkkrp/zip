@@ -55,19 +55,15 @@ import System.Directory
 import System.FilePath
 import System.IO
 import System.IO.Error (isDoesNotExistError)
-
 #ifndef mingw32_HOST_OS
-import qualified Codec.Archive.Zip.Unix as Unix
+import Codec.Archive.Zip.Unix qualified as Unix
 #endif
-
 #ifdef ENABLE_BZIP2
-import qualified Data.Conduit.BZlib as BZ
+import Data.Conduit.BZlib qualified as BZ
 #endif
-
 #ifdef ENABLE_ZSTD
-import qualified Data.Conduit.Zstd as Zstandard
+import Data.Conduit.Zstd qualified as Zstandard
 #endif
-
 #if !MIN_VERSION_base(4,20,0)
 import Data.Foldable (foldl')
 #endif
@@ -581,8 +577,6 @@ sinkEntry h s o src EditingActions {..} = do
   hSeek h AbsoluteSeek afterStreaming
   return desc2
 
-{- ORMOLU_DISABLE -}
-
 -- | Create a 'Sink' to stream data there. Once streaming is finished,
 -- return 'DataDescriptor' for the streamed data. The action /does not/
 -- close the given 'Handle'.
@@ -600,7 +594,8 @@ sinkData h compression = do
           ZipSink sizeSink <* ZipSink (CB.sinkHandle h)
       withCompression sink =
         getZipSink $
-          (,,) <$> ZipSink sizeSink
+          (,,)
+            <$> ZipSink sizeSink
             <*> ZipSink crc32Sink
             <*> ZipSink sink
   (uncompressedSize, crc32, compressedSize) <-
@@ -631,8 +626,6 @@ sinkData h compression = do
         ddCompressedSize = compressedSize,
         ddUncompressedSize = uncompressedSize
       }
-
-{- ORMOLU_ENABLE -}
 
 -- | Append central directory entries and the end of central directory
 -- record to the file that given 'Handle' is associated with. Note that this
@@ -1181,13 +1174,11 @@ decompressingPipe ::
   ConduitT ByteString ByteString m ()
 decompressingPipe Store = C.awaitForever C.yield
 decompressingPipe Deflate = Z.decompress $ Z.WindowBits (-15)
-
 #ifdef ENABLE_BZIP2
 decompressingPipe BZip2 = BZ.bunzip2
 #else
 decompressingPipe BZip2 = throwM (UnsupportedCompressionMethod BZip2)
 #endif
-
 #ifdef ENABLE_ZSTD
 decompressingPipe Zstd = Zstandard.decompress
 #else
@@ -1235,22 +1226,19 @@ fromMsDosTime MsDosTime {..} =
 -- big archives on CI).
 
 ffff, ffffffff :: Natural
-
 #ifdef HASKELL_ZIP_DEV_MODE
-ffff     = 25
+ffff = 25
 ffffffff = 250
 #else
-ffff     = 0xffff
+ffff = 0xffff
 ffffffff = 0xffffffff
 #endif
 
 -- | The default permissions for the files, permissions not set on Windows,
 -- and are set to rw on Unix. This mimics the behavior of the zip utility.
 defaultFileMode :: Word32
-
 #ifdef mingw32_HOST_OS
 defaultFileMode = 0
-
 #else
 defaultFileMode = Unix.fromFileMode 0o600
 #endif
