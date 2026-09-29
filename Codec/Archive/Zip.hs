@@ -678,7 +678,7 @@ getPending = ZipArchive (gets zsActions)
 modifyActions :: (Seq I.PendingAction -> Seq I.PendingAction) -> ZipArchive ()
 modifyActions f = ZipArchive (modify g)
   where
-    g st = st {zsActions = f (zsActions st)}
+    g st = st{zsActions = f (zsActions st)}
 
 -- | Add a new action to the list of pending actions.
 addPending :: I.PendingAction -> ZipArchive ()

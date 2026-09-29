@@ -234,7 +234,7 @@ sourceEntry ::
   Bool ->
   -- | Source of uncompressed data
   ConduitT () ByteString m ()
-sourceEntry path (EntryDescription {..}) d =
+sourceEntry path (EntryDescription{..}) d =
   -- We cannot simply use CB.sourceIOHandle
   -- because that closes the archive only when its end is reached.
   -- See <https://github.com/mrkkrp/zip/issues/142>.
@@ -276,7 +276,7 @@ commit ::
   -- | Collection of pending actions
   Seq PendingAction ->
   IO ()
-commit path ArchiveDescription {..} entries xs =
+commit path ArchiveDescription{..} entries xs =
   withNewFile path $ \h -> do
     let (ProducingActions copying sinking, editing) =
           optimize (toRecreatingActions path entries >< xs)
@@ -407,7 +407,7 @@ optimize =
           clearEditingFor s ea
         )
       Recompress m s ->
-        (pa, ea {eaCompression = M.insert s m (eaCompression ea)})
+        (pa, ea{eaCompression = M.insert s m (eaCompression ea)})
       SetEntryComment txt s ->
         ( pa,
           ea
@@ -423,7 +423,7 @@ optimize =
             }
         )
       SetModTime time s ->
-        (pa, ea {eaModTime = M.insert s time (eaModTime ea)})
+        (pa, ea{eaModTime = M.insert s time (eaModTime ea)})
       AddExtraField n b s ->
         ( pa,
           ea
@@ -440,7 +440,7 @@ optimize =
         )
       SetExternalFileAttributes b s ->
         ( pa,
-          ea {eaExtFileAttr = M.insert s b (eaExtFileAttr ea)}
+          ea{eaExtFileAttr = M.insert s b (eaExtFileAttr ea)}
         )
       _ -> (pa, ea)
     clearEditingFor s ea =
@@ -506,7 +506,7 @@ sinkEntry ::
   EditingActions ->
   -- | Info to generate the central directory file headers later
   IO EntryDescription
-sinkEntry h s o src EditingActions {..} = do
+sinkEntry h s o src EditingActions{..} = do
   currentTime <- getCurrentTime
   offset <- hTell h
   let compressed = case o of
@@ -542,7 +542,7 @@ sinkEntry h s o src EditingActions {..} = do
             edExternalFileAttrs = extFileAttr
           }
   B.hPut h (runPut (putHeader (LocalHeader o) s desc0))
-  DataDescriptor {..} <-
+  DataDescriptor{..} <-
     C.runConduitRes $
       if recompression
         then
@@ -770,7 +770,7 @@ parseZip64ExtraField ::
   ByteString ->
   -- | Result
   Zip64ExtraField
-parseZip64ExtraField dflt@Zip64ExtraField {..} b =
+parseZip64ExtraField dflt@Zip64ExtraField{..} b =
   either (const dflt) id . flip runGet b $ do
     let ifsat v =
           if v >= ffffffff
@@ -789,7 +789,7 @@ makeZip64ExtraField ::
   Zip64ExtraField ->
   -- | Resulting representation
   ByteString
-makeZip64ExtraField headerType Zip64ExtraField {..} = runPut $ do
+makeZip64ExtraField headerType Zip64ExtraField{..} = runPut $ do
   case headerType of
     LocalHeader _ -> do
       putWord64le (fromIntegral z64efUncompressedSize) -- uncompressed size
@@ -824,7 +824,7 @@ putHeader ::
   -- | Description of entry
   EntryDescription ->
   Put
-putHeader headerType s entry@EntryDescription {..} = do
+putHeader headerType s entry@EntryDescription{..} = do
   let isCentralDirHeader = headerType == CentralDirHeader
   putWord32le (bool 0x04034b50 0x02014b50 isCentralDirHeader)
   -- ↑ local/central file header signature
@@ -1144,14 +1144,14 @@ fromCompressionMethod Zstd = 93
 
 -- | Check if an entry with these parameters needs the Zip64 extension.
 needsZip64 :: EntryDescription -> Bool
-needsZip64 EntryDescription {..} =
+needsZip64 EntryDescription{..} =
   any
     (>= ffffffff)
     [edOffset, edCompressedSize, edUncompressedSize]
 
 -- | Check if an entry has Zip64 extra fields.
 entryUsesZip64 :: EntryDescription -> Bool
-entryUsesZip64 EntryDescription {..} = M.member 1 edExtraField
+entryUsesZip64 EntryDescription{..} = M.member 1 edExtraField
 
 -- | Determine “version needed to extract” that should be written to the
 -- headers given the need of the Zip64 feature and the compression method.
@@ -1191,7 +1191,7 @@ crc32Sink = CL.fold crc32Update 0
 
 -- | Convert 'UTCTime' to the MS-DOS time format.
 toMsDosTime :: UTCTime -> MsDosTime
-toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
+toMsDosTime UTCTime{..} = MsDosTime dosDate dosTime
   where
     dosTime = fromIntegral (seconds + shiftL minutes 5 + shiftL hours 11)
     dosDate = fromIntegral (day + shiftL month 5 + shiftL year 9)
@@ -1206,7 +1206,7 @@ toMsDosTime UTCTime {..} = MsDosTime dosDate dosTime
 
 -- | Convert MS-DOS date-time to 'UTCTime'.
 fromMsDosTime :: MsDosTime -> UTCTime
-fromMsDosTime MsDosTime {..} =
+fromMsDosTime MsDosTime{..} =
   UTCTime
     (fromGregorian year month day)
     (secondsToDiffTime $ hours * 3600 + minutes * 60 + seconds)

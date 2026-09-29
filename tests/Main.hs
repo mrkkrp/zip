@@ -714,7 +714,7 @@ forEntriesSpec =
       forEntries (setEntryComment txt)
       commit
       getEntries
-    let f ed = ed {edComment = Just txt}
+    let f ed = ed{edComment = Just txt}
     m' `shouldSatisfy` softEqMap (M.map f m)
 
 undoEntryChangesSpec :: SpecWith FilePath
